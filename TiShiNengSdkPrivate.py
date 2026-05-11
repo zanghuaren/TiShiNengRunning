@@ -141,15 +141,14 @@ class TiShiNengPrivate:
             resp = await self.httpClient.post(url=url, data=data, headers=headers)
             if resp.status_code == 200:
                 try:
-                    resp = resp.json()
-                except Exception as e:
-                    logger.info(resp.text)
-                if resp['returnCode'] == '200':
-                    # logger.info(resp)
-                    return resp['data']
-                raise TiShiNengError(resp['returnMsg'])
+                    resp_json = resp.json()
+                except Exception:
+                    raise TiShiNengError(f"响应非JSON (body={resp.text[:80]!r})")
+                if resp_json['returnCode'] == '200':
+                    return resp_json['data']
+                raise TiShiNengError(resp_json['returnMsg'])
             else:
-                raise TiShiNengError(resp.text[:100], resp.status_code)
+                raise TiShiNengError(f"HTTP {resp.status_code}: {resp.text[:80]!r}", resp.status_code)
         except TiShiNengError as e:
             raise e
 
@@ -313,9 +312,12 @@ class TiShiNengPrivate:
         }
         resp = await self.httpClient.post(url=url, files=file, headers=headers, timeout=30)
         if resp.status_code == 200:
-            resp = resp.json()
-            if int(resp['returnCode']) == 200:
-                return resp['data']
-            raise TiShiNengError(resp['returnMsg'])
+            try:
+                resp_json = resp.json()
+            except Exception:
+                raise TiShiNengError(f"人脸响应非JSON (body={resp.text[:80]!r})")
+            if int(resp_json['returnCode']) == 200:
+                return resp_json['data']
+            raise TiShiNengError(resp_json['returnMsg'])
         else:
-            raise TiShiNengError(resp.text[:100], resp.status_code)
+            raise TiShiNengError(f"HTTP {resp.status_code}: {resp.text[:80]!r}", resp.status_code)

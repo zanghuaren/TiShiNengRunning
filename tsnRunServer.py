@@ -39,10 +39,11 @@ def seconds_to_time_format(total_seconds):
 
 
 class TsnRunServer:
-    def __init__(self, accountId: int, runKiloMeter: float, logRunType: TsnRunType):
+    def __init__(self, accountId: int, runKiloMeter: float, logRunType: TsnRunType, useImageBed: bool = False):
         self.accountId = accountId
         self.runKiloMeter = runKiloMeter
         self.logRunType = logRunType
+        self.useImageBed = useImageBed
 
         self.accountModel: TsnAccount_Model | None = None
         self.tsnClient = None
@@ -67,6 +68,11 @@ class TsnRunServer:
         self.middleFaces = []
         self.startLongitude = 0
         self.startLatitude = 0
+
+        # 图床图片列表缓存，启动时拉取一次，按顺序轮换使用
+        self._bed_images: list = []
+        self._bed_image_index: int = 0
+        self._bed_images_fetched: bool = False
 
     @classmethod
     def publicRunTypeConvert(cls, runType: TsnRunType):
@@ -153,14 +159,55 @@ class TsnRunServer:
             logger.error(f"修改图片失败: {e}, 返回原始图片")
             return image_bytes
 
+    async def _fetch_bed_images(self) -> list:
+        """从图床拉取图片列表，打乱顺序后返回 URL 列表"""
+        username = self.accountModel.username
+        try:
+            async with httpx.AsyncClient(verify=False) as client:
+                resp = await client.get(
+                    'https://api.babiq.cc/picturesbed/bedapi.php',
+                    params={'action': 'getImages', 'user': username},
+                    timeout=15.0,
+                )
+                data = resp.json()
+            if data.get('status') == 'success' and data.get('images'):
+                urls = [img['url'] for img in data['images']]
+                random.shuffle(urls)
+                logger.info(f"图床获取到 {len(urls)} 张图片: {[u.rsplit('/', 1)[-1] for u in urls]}")
+                return urls
+            else:
+                logger.warning(f"图床返回无图片: {data}")
+        except Exception as e:
+            logger.warning(f"图床请求失败: {e}")
+        return []
+
     async def getFaceImage(self):
-        """
-        获取人脸图片
-        优先从本地文件夹读取，如果没有则调用API获取并下载保存
-        返回: 人脸图片字节数据
-        抛出: TiShiNengError - 当无法获取人脸图片时
-        """
-        # 创建人脸图片存储目录 (使用 school_id/user_id 避免冲突)
+        # 图床模式
+        if self.useImageBed:
+            # 首次调用时拉取图片列表（只拉一次，空列表也不重试）
+            if not self._bed_images_fetched:
+                self._bed_images = await self._fetch_bed_images()
+                self._bed_image_index = 0
+                self._bed_images_fetched = True
+
+            if self._bed_images:
+                # 按顺序轮换，保证多张时开始/结束用不同图片
+                url = self._bed_images[self._bed_image_index % len(self._bed_images)]
+                self._bed_image_index += 1
+                filename = url.rsplit('/', 1)[-1]
+                logger.info(f"图床图片: {filename} (第{self._bed_image_index}次人脸，共{len(self._bed_images)}张可用)")
+                try:
+                    async with httpx.AsyncClient(verify=False) as client:
+                        img_resp = await client.get(url, timeout=30.0)
+                    if img_resp.status_code == 200:
+                        return img_resp.content
+                    logger.warning(f"图床图片下载失败，状态码: {img_resp.status_code}，回退本地")
+                except Exception as e:
+                    logger.warning(f"图床图片下载失败: {e}，回退本地")
+            else:
+                logger.warning("图床无可用图片，回退本地")
+
+        # 本地模式（或图床失败后的回退）
         face_dir = Path("face_images") / str(self.accountModel.school_id) / str(self.accountModel.user_id)
         face_dir.mkdir(parents=True, exist_ok=True)
 
@@ -500,6 +547,8 @@ class TsnRunServer:
         self.needRunKm = self.exerciseSetting['totalRange']
         if self.runKiloMeter < self.needRunKm:
             self.runKiloMeter = self.needRunKm + random.uniform(0.1, 0.2)
+        else:
+            self.runKiloMeter = self.runKiloMeter + random.uniform(0.1, 0.2)
         logger.info(self.exerciseSetting)
 
         self.planUseTime = self.runKiloMeter * random.uniform(4.5, 5.5) * 60
@@ -520,4 +569,11 @@ class TsnRunServer:
 
     async def startRunHandle(self):
         logger.info("开始运行")
-        await self.startRun()
+        try:
+            await self.startRun()
+        finally:
+            if self.tsnClient is not None:
+                try:
+                    await self.tsnClient.close()
+                except Exception:
+                    pass

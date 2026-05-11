@@ -1,9 +1,14 @@
 import hashlib
+import os
 import time
 import urllib.parse
 
 import httpx
 from loguru import logger
+
+_PROXY = (os.environ.get("http_proxy") or os.environ.get("HTTP_PROXY") or
+          os.environ.get("https_proxy") or os.environ.get("HTTPS_PROXY") or
+          "http://219.152.95.106:8201")
 
 
 class TiShiNengSdkBase:
@@ -20,7 +25,7 @@ class TiShiNengSdkBase:
         self.platform = '1'
         self.versionName = '2.0.16'
         self.version = '20160'
-        self.httpClient = httpx.AsyncClient()
+        self.httpClient = httpx.AsyncClient(timeout=30.0, proxy=_PROXY, verify=False)
         self.token = token
         self.headers = {
             "Host": "m.boxkj.com",
@@ -70,12 +75,15 @@ class TiShiNengSdkBase:
             data['sign'] = sign
             resp = await self.httpClient.post(url=url, data=data, headers=self.headers)
             if resp.status_code == 200:
-                resp = resp.json()
-                if resp['returnCode'] == '200':
-                    return resp
-                raise Exception(resp['returnMsg'])
+                try:
+                    resp_json = resp.json()
+                except Exception:
+                    raise Exception(f"响应非JSON (status=200, body={resp.text[:80]!r})")
+                if resp_json['returnCode'] == '200':
+                    return resp_json
+                raise Exception(resp_json['returnMsg'])
             else:
-                return None
+                raise Exception(f"HTTP {resp.status_code}: {resp.text[:80]!r}")
         except Exception as e:
             logger.exception(e)
             return None
@@ -120,6 +128,9 @@ class TiShiNengSdkBase:
         url = '/app/replyFeedBack/getReplyFeedBackCountUser'
         params = {"schoolId": self.schoolId, "userId": self.uid}
         return await self.httpPost(url, params)
+
+    async def close(self):
+        await self.httpClient.aclose()
 
     def getHttpClient(self):
         return self.httpClient

@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>体适能代跑管理系统</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f7fa; color: #333; }
+.header { background: #1a73e8; color: #fff; padding: 16px 24px; font-size: 18px; font-weight: 600; }
+.tabs { display: flex; background: #fff; border-bottom: 2px solid #e0e0e0; padding: 0 24px; }
+.tab { padding: 14px 20px; cursor: pointer; font-size: 14px; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tab.active { color: #1a73e8; border-bottom-color: #1a73e8; font-weight: 600; }
+.tab:hover:not(.active) { color: #333; }
+.panel { display: none; padding: 24px; max-width: 1100px; margin: 0 auto; }
+.panel.active { display: block; }
+.card { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.card h3 { font-size: 15px; margin-bottom: 18px; color: #444; font-weight: 600; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group.full { grid-column: 1 / -1; }
+label { font-size: 13px; color: #555; font-weight: 500; }
+select, input[type=text], input[type=password], input[type=number] {
+  padding: 9px 11px; border: 1px solid #d0d0d0; border-radius: 6px; font-size: 14px; outline: none;
+  transition: border-color .2s; width: 100%;
+}
+select:focus, input:focus { border-color: #1a73e8; box-shadow: 0 0 0 2px rgba(26,115,232,.12); }
+
+/* 时间滑块 */
+.time-slider-wrap { display: flex; flex-direction: column; gap: 8px; }
+.time-slider-track { display: flex; align-items: center; gap: 12px; }
+.time-slider-track input[type=range] {
+  flex: 1; -webkit-appearance: none; appearance: none;
+  height: 4px; border-radius: 2px; outline: none; cursor: pointer;
+  background: linear-gradient(to right, #1a73e8 0%, #1a73e8 var(--pct, 0%), #d0d0d0 var(--pct, 0%), #d0d0d0 100%);
+  border: none; padding: 0; box-shadow: none;
+}
+.time-slider-track input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+  background: #1a73e8; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.25); cursor: pointer;
+}
+.time-slider-track input[type=range]::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #1a73e8; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.25); cursor: pointer;
+}
+.time-slider-badge {
+  min-width: 56px; text-align: center; font-size: 14px; font-weight: 600;
+  color: #1a73e8; background: #e8f0fe; border-radius: 6px; padding: 4px 8px;
+}
+.time-slider-off { font-size: 13px; color: #aaa; }
+.time-slider-labels { display: flex; justify-content: space-between; font-size: 11px; color: #bbb; padding: 0 2px; }
+
+/* 搜索下拉 */
+.search-select { position: relative; }
+.search-select input { cursor: text; }
+.search-dropdown {
+  display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 100;
+  background: #fff; border: 1px solid #d0d0d0; border-top: none; border-radius: 0 0 6px 6px;
+  max-height: 220px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,.1);
+}
+.search-dropdown.open { display: block; }
+.search-option {
+  padding: 9px 12px; cursor: pointer; font-size: 13px; color: #333;
+  border-bottom: 1px solid #f5f5f5;
+}
+.search-option:last-child { border-bottom: none; }
+.search-option:hover, .search-option.active { background: #e8f0fe; color: #1a73e8; }
+.search-option .school-type { font-size: 11px; color: #999; margin-left: 6px; }
+.search-empty { padding: 12px; text-align: center; color: #aaa; font-size: 13px; }
+
+/* 文件上传 */
+.file-upload input[type=file] { display: none; }
+.file-label {
+  display: flex; align-items: center; gap: 8px; padding: 9px 11px;
+  border: 1px dashed #c0c0c0; border-radius: 6px; cursor: pointer; font-size: 13px; color: #666;
+  transition: border-color .2s, background .2s;
+}
+.file-label:hover { border-color: #1a73e8; background: #f0f6ff; color: #1a73e8; }
+.file-label.has-file { border-color: #1e7e34; background: #f0faf2; color: #1e7e34; border-style: solid; }
+.preview-wrap { margin-top: 8px; display: none; }
+.preview-wrap img { max-width: 90px; max-height: 90px; border-radius: 6px; border: 1px solid #e0e0e0; }
+
+.btn { padding: 10px 24px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background .2s; }
+.btn-primary { background: #1a73e8; color: #fff; }
+.btn-primary:hover { background: #1558b0; }
+.btn-primary:disabled { background: #9ec3f5; cursor: not-allowed; }
+.btn-sm { padding: 4px 10px; font-size: 12px; border-radius: 4px; }
+.btn-ghost { background: transparent; border: 1px solid #d0d0d0; color: #555; }
+.btn-ghost:hover { background: #f5f5f5; }
+.btn-full { width: 100%; margin-top: 6px; padding: 12px; font-size: 15px; }
+
+/* 订单表格横向滚动容器 */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
+th { background: #f8f9fa; padding: 10px 12px; text-align: left; font-weight: 600; color: #555; border-bottom: 2px solid #e0e0e0; white-space: nowrap; }
+td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #fafbff; }
+
+/* 移动端：收窄可省略的列 */
+@media (max-width: 600px) {
+  .panel { padding: 12px; }
+  .card { padding: 14px; }
+  .form-grid { grid-template-columns: 1fr; }
+  .form-group.full { grid-column: 1; }
+  th.hide-mobile, td.hide-mobile { display: none; }
+  .header-title-full { display: none; }
+  .header-title-short { display: inline; }
+  .header-credits-icon { display: none; }
+  .progress-bar-desktop { display: none; }
+}
+@media (min-width: 601px) {
+  .header-title-full { display: inline; }
+  .header-title-short { display: none; }
+  .header-credits-icon { display: inline; }
+}
+.badge { display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+.badge-week-limit { background: #fff3e0; color: #e65100; }
+.badge-day-limit  { background: #fff3e0; color: #e65100; }
+.badge-face-error { background: #fce4ec; color: #880e4f; }
+.badge-cheating   { background: #311b92; color: #fff; }
+.badge-running-now { background: #e3f0ff; color: #1a73e8; }
+
+/* 计划详情模态框 */
+.plan-modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 300;
+  align-items: center; justify-content: center;
+}
+.plan-modal-overlay.open { display: flex; }
+.plan-modal {
+  background: #fff; border-radius: 10px; width: 92%; max-width: 820px;
+  max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,.2);
+}
+@media (max-width: 600px) {
+  .plan-modal { width: 92%; max-width: 96%; }
+}
+.plan-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid #e0e0e0; flex-shrink: 0;
+}
+.plan-detail-table { min-width: 0; }
+@media (max-width: 600px) {
+  .plan-detail-table th, .plan-detail-table td { padding: 8px 6px; font-size: 12px; white-space: nowrap; }
+}
+.plan-modal-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+@media (max-width: 600px) {
+  .plan-modal-body { padding: 10px; }
+}
+.badge-running { background: #e3f0ff; color: #1a73e8; }
+.badge-completed { background: #e6f4ea; color: #1e7e34; }
+.badge-failed { background: #fce8e6; color: #c5221f; }
+.badge-cancelled { background: #f1f3f4; color: #80868b; }
+
+.msg { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-top: 14px; }
+.msg-success { background: #e6f4ea; color: #1e7e34; }
+.msg-error { background: #fce8e6; color: #c5221f; }
+.empty { text-align: center; color: #aaa; padding: 32px; font-size: 14px; }
+.refresh-hint { font-size: 12px; color: #aaa; margin-bottom: 10px; }
+.hint { font-size: 12px; color: #999; margin-top: 4px; }
+
+/* 进度条 */
+.progress-wrap { display: flex; align-items: center; gap: 6px; min-width: 80px; }
+.progress-bar { flex: 1; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 4px; background: #1a73e8; transition: width .3s; }
+.progress-fill.done { background: #1e7e34; }
+.progress-text { font-size: 12px; color: #666; white-space: nowrap; }
+
+/* 计划任务表格移动端列宽 */
+@media (max-width: 600px) {
+  #panel-plans table { table-layout: auto; width: 100%; border-spacing: 0; }
+  #panel-plans th, #panel-plans td { padding: 6px; }
+  #panel-plans .col-account { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; max-width: 80px; }
+  #panel-plans .progress-wrap { min-width: 0; }
+  #panel-plans .progress-text { font-size: 11px; white-space: nowrap; }
+}
+
+/* 日志模态框 */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: #fff; border-radius: 10px; width: 90%; max-width: 760px;
+  max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,.2);
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid #e0e0e0;
+}
+.modal-header h4 { font-size: 15px; color: #333; }
+.modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: #888; line-height: 1; }
+.modal-close:hover { color: #333; }
+.log-box {
+  flex: 1; overflow-y: auto; background: #1e1e2e; color: #cdd6f4;
+  font-family: "Consolas", "Monaco", monospace; font-size: 12.5px; line-height: 1.6;
+  padding: 14px 16px; white-space: pre-wrap; word-break: break-all;
+}
+.log-box .log-line { display: block; }
+.log-line.info { color: #a6e3a1; }
+.log-line.warn { color: #f9e2af; }
+.log-line.err  { color: #f38ba8; }
+.log-line.debug { color: #89b4fa; }
+.modal-footer { padding: 12px 20px; border-top: 1px solid #e0e0e0; display: flex; gap: 8px; align-items: center; }
+.log-status { font-size: 12px; color: #888; flex: 1; }
+
+/* 登录遮罩 */
+#login-overlay {
+  display: none; position: fixed; inset: 0; background: #f5f7fa; z-index: 9999;
+  align-items: center; justify-content: center;
+}
+.login-box {
+  background: #fff; padding: 2rem; border-radius: 10px;
+  box-shadow: 0 2px 20px rgba(0,0,0,.12); width: 320px;
+}
+.login-box h2 { margin: 0 0 1.5rem; text-align: center; font-size: 18px; color: #333; }
+.login-field { margin-bottom: 1rem; }
+.login-field label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; font-weight: 500; }
+.login-field input { width: 100%; padding: 9px 11px; border: 1px solid #d0d0d0; border-radius: 6px; font-size: 14px; outline: none; }
+.login-field input:focus { border-color: #1a73e8; box-shadow: 0 0 0 2px rgba(26,115,232,.12); }
+.login-submit { width: 100%; padding: 11px; background: #1a73e8; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: 500; margin-top: 4px; }
+.login-submit:hover { background: #1558b0; }
+.login-submit:disabled { background: #9ec3f5; cursor: not-allowed; }
+#login-error { color: #c5221f; font-size: 13px; margin-top: 10px; text-align: center; display: none; }
+</style>
+</head>
+<body>
+<div id="login-overlay">
+  <div class="login-box">
+    <h2>体适能代跑管理系统</h2>
+    <div class="login-field">
+      <label>用户名</label>
+      <input type="text" id="login-username" placeholder="请输入用户名" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <label>密码</label>
+      <input type="password" id="login-password" placeholder="请输入密码" autocomplete="current-password">
+    </div>
+    <button class="login-submit" id="login-btn">登录</button>
+    <p id="login-error"></p>
+  </div>
+</div>
+<div id="main-content" style="display:none">
+<div class="header" style="display:flex;align-items:center;justify-content:space-between">
+  <span><span class="header-title-full">体适能代跑管理系统</span><span class="header-title-short">体适能</span></span>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span id="header-credits" style="font-size:13px;opacity:.85;background:rgba(255,255,255,.15);padding:3px 10px;border-radius:12px;margin-right:4px"></span><span id="header-username" style="font-size:13px;opacity:.85"></span>
+    <button onclick="logout()" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:13px">退出</button>
+  </div>
+</div>
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('order')">下单</div>
+  <div class="tab" onclick="switchTab('accounts')">跑步记录</div>
+  <div class="tab" onclick="switchTab('plans')">计划任务</div>
+  <div class="tab" id="tab-admin" onclick="switchTab('admin')" style="display:none">管理</div>
+</div>
+
+<!-- 下单 -->
+<div id="panel-order" class="panel active">
+  <div class="card">
+    <h3>提交跑步订单</h3>
+    <div class="form-grid">
+      <div class="form-group full">
+        <label>学校</label>
+        <div class="search-select" id="school-select-wrap">
+          <input type="text" id="school-search" placeholder="输入学校名称搜索..." autocomplete="off"
+                 oninput="filterSchools()" onfocus="openDropdown()" onblur="closeDropdown()" onkeydown="schoolKeydown(event)">
+          <input type="hidden" id="school-id-val">
+          <div class="search-dropdown" id="school-dropdown"></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>用户名</label>
+        <input type="text" id="order-username" placeholder="请输入学号">
+      </div>
+      <div class="form-group">
+        <label>密码</label>
+        <input type="password" id="order-password" placeholder="请输入密码">
+      </div>
+      <div class="form-group">
+        <label>跑步类型</label>
+        <select id="order-run-type">
+          <option value="sumRun" selected>阳光跑</option>
+          <option value="morningRun">晨跑</option>
+          <option value="freedom">自由跑</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>每次距离 (km)</label>
+        <input type="number" id="order-distance" value="2" min="0.1" max="50" step="0.1" oninput="localStorage.setItem('lastDistance', this.value)">
+      </div>
+      <div class="form-group">
+        <label>总距离 (km)</label>
+        <input type="number" id="order-total-distance" min="0.1" max="500" step="0.1" style="width:100%" oninput="onTotalDistanceChange()">
+      </div>
+      <div class="form-group">
+        <label>图床图片</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;font-size:14px;color:#555;padding:9px 0">
+          <input type="checkbox" id="order-use-image-bed" style="width:auto;margin:0">
+          启用图床图片
+        </label>
+      </div>
+      <div class="form-group full" id="scheduled-group">
+        <label>计划跑步时间</label>
+        <div class="time-slider-wrap">
+          <label style="font-size:13px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;margin-bottom:8px">
+            <input type="checkbox" id="scheduled-enable" style="width:auto" onchange="onScheduledToggle(this)">
+            启用定时跑步
+          </label>
+          <div class="time-slider-track">
+            <input type="range" id="order-scheduled-slider" min="0" max="84" step="1"
+              style="--pct:0%" oninput="onScheduledSlider(this)" disabled>
+            <span class="time-slider-badge time-slider-off" id="scheduled-badge">不定时</span>
+          </div>
+          <div class="time-slider-labels"><span>08:00</span><span>11:30</span><span>15:00</span><span>18:30</span><span>22:00</span></div>
+        </div>
+      </div>
+      <div class="form-group full" style="display:none">
+        <label>人脸图片（可选，上传后将覆盖服务器底图）</label>
+        <div class="file-upload">
+          <label class="file-label" id="face-label" for="face-input">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span id="face-label-text">点击选择图片（jpg / png）</span>
+          </label>
+          <input type="file" id="face-input" accept="image/jpeg,image/png,image/jpg" onchange="onFaceSelected(this)">
+        </div>
+        <div class="preview-wrap" id="face-preview-wrap">
+          <img id="face-preview" src="" alt="预览">
+        </div>
+        <p class="hint">不上传则使用账号已有的人脸图片</p>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-full" id="btn-place" onclick="placeOrder()">提交订单</button>
+    <div id="order-msg"></div>
+  </div>
+</div>
+
+<!-- 订单列表 -->
+<div id="panel-orders" class="panel">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+      <input type="text" id="orders-filter" placeholder="搜索：账号、学校、状态、日期，空格分隔多个关键词"
+             oninput="renderOrders()" style="flex:1;min-width:200px">
+      <span class="refresh-hint" id="refresh-hint" style="margin:0;white-space:nowrap">每 10 秒自动刷新</span>
+    </div>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>ID</th><th>账号</th><th class="hide-mobile">学校</th><th class="hide-mobile">类型</th><th>距离</th><th>状态</th><th class="hide-mobile">创建时间</th><th class="hide-mobile">完成时间</th><th>操作</th></tr>
+      </thead>
+      <tbody id="orders-tbody"></tbody>
+    </table>
+    </div>
+    <div id="orders-empty" class="empty" style="display:none">暂无订单</div>
+  </div>
+</div>
+
+<!-- 跑步记录 -->
+<div id="panel-accounts" class="panel">
+  <div class="card">
+    <h3>查询跑步记录</h3>
+    <div class="form-grid">
+      <div class="form-group full">
+        <label>学校</label>
+        <div class="search-select" id="record-school-select-wrap">
+          <input type="text" id="record-school-search" placeholder="输入学校名称搜索..." autocomplete="off"
+                 oninput="filterRecordSchools()" onfocus="openRecordDropdown()" onblur="closeRecordDropdown()" onkeydown="recordSchoolKeydown(event)">
+          <input type="hidden" id="record-school-id-val">
+          <div class="search-dropdown" id="record-school-dropdown"></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>学号</label>
+        <input type="text" id="record-username" placeholder="请输入学号" oninput="autoFillRecordSchool(this.value)">
+      </div>
+      <div class="form-group">
+        <label>密码</label>
+        <input type="password" id="record-password" placeholder="已授权账号可留空">
+      </div>
+    </div>
+    <button class="btn btn-primary btn-full" id="btn-query-records" onclick="queryRunRecords()" style="margin-top:14px">查询跑步记录</button>
+    <div id="record-msg"></div>
+  </div>
+  <div class="card" id="record-result-card" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <h3 id="record-result-title" style="margin:0">跑步记录</h3>
+      <div id="record-dates-wrap" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>时间</th><th>类型</th><th>距离</th><th class="hide-mobile">用时</th><th class="hide-mobile">配速</th><th>状态</th></tr></thead>
+      <tbody id="records-tbody"></tbody>
+    </table>
+    </div>
+    <div id="records-empty" class="empty" style="display:none">暂无跑步记录</div>
+  </div>
+</div>
+
+<!-- 计划任务 -->
+<div id="panel-plans" class="panel" style="max-width:1200px">
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h3 style="margin-bottom:0">进行中</h3>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="plans-page-info" style="font-size:13px;color:#888"></span>
+        <button class="btn btn-ghost btn-sm" id="btn-plans-prev" onclick="changePlansPage(-1)" style="display:none">上一页</button>
+        <button class="btn btn-ghost btn-sm" id="btn-plans-next" onclick="changePlansPage(1)" style="display:none">下一页</button>
+        <button class="btn btn-ghost btn-sm" id="btn-retry-failed" onclick="retryFailedPlans(this)" style="color:#c5221f;border-color:#f5c6c4">重跑失败订单</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>ID</th><th>账号</th><th class="hide-mobile">密码</th><th class="hide-mobile">学校</th><th>进度</th><th class="hide-mobile">每日限额</th><th class="hide-mobile">计划时间</th><th>今日状态</th><th>操作</th></tr></thead>
+      <tbody id="plans-tbody-active"></tbody>
+    </table>
+    </div>
+    <div id="plans-empty-active" class="empty" style="display:none">暂无进行中的计划</div>
+  </div>
+  <div class="card">
+    <h3>其它</h3>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>ID</th><th>账号</th><th class="hide-mobile">密码</th><th class="hide-mobile">学校</th><th class="hide-mobile">每日限额</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody id="plans-tbody-other"></tbody>
+    </table>
+    </div>
+    <div id="plans-empty-other" class="empty" style="display:none">暂无其它计划</div>
+  </div>
+</div>
+
+
+<!-- 管理员面板 -->
+<div id="panel-admin" class="panel">
+  <div class="card">
+    <h3>添加账号</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>用户名</label>
+        <input type="text" id="new-user-username" placeholder="请输入用户名">
+      </div>
+      <div class="form-group">
+        <label>密码</label>
+        <input type="password" id="new-user-password" placeholder="请输入密码">
+      </div>
+      <div class="form-group">
+        <label>初始渔货</label>
+        <input type="number" id="new-user-credits" value="0" min="0" step="1">
+      </div>
+      <div class="form-group" style="justify-content:flex-end">
+        <button class="btn btn-primary" id="new-user-btn" onclick="createWebUser()" style="margin-top:auto">创建账号</button>
+      </div>
+    </div>
+    <p id="new-user-msg" style="margin-top:10px;font-size:13px;display:none"></p>
+  </div>
+  <div class="card">
+    <h3>用户管理</h3>
+    <div class="table-wrap">
+    <table id="admin-users-table">
+      <thead><tr><th>用户名</th><th>角色</th><th>渔货余额</th><th>已跑公里</th><th>总下单公里</th><th>调整渔货</th><th>操作</th></tr></thead>
+      <tbody id="admin-users-tbody"></tbody>
+    </table>
+    </div>
+    <div id="admin-users-empty" class="empty" style="display:none">暂无用户</div>
+  </div>
+</div>
+
+<!-- 日志模态框 -->
+<div class="modal-overlay" id="log-modal" onclick="closeLogModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h4 id="log-modal-title">跑步日志</h4>
+      <button class="modal-close" onclick="closeLogModal()">×</button>
+    </div>
+    <div class="log-box" id="log-box"></div>
+    <div class="modal-footer">
+      <span class="log-status" id="log-status">加载中...</span>
+      <button class="btn btn-ghost btn-sm" id="btn-load-more" style="display:none" onclick="loadMoreLogs()">加载更多</button>
+      <button class="btn btn-ghost btn-sm" onclick="scrollLogToBottom()">滚到底部</button>
+    </div>
+  </div>
+</div>
+
+<!-- 计划详情模态框 -->
+<div class="plan-modal-overlay" id="plan-detail-modal" onclick="closePlanDetailModal(event)">
+  <div class="plan-modal" onclick="event.stopPropagation()">
+    <div class="plan-modal-header">
+      <h4 id="plan-detail-title">计划详情</h4>
+      <button class="modal-close" onclick="closePlanDetailModal()">×</button>
+    </div>
+    <div class="plan-modal-body">
+      <div class="table-wrap">
+        <table class="plan-detail-table">
+          <thead><tr><th>距离</th><th>今日状态</th><th>完成时间</th><th>操作</th></tr></thead>
+          <tbody id="plan-detail-tbody"></tbody>
+        </table>
+      </div>
+      <div id="plan-detail-list" style="display:none"></div>
+      <div id="plan-detail-empty" class="empty" style="display:none">暂无跑步记录</div>
+      <div id="plan-detail-loading" class="empty">加载中...</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+let allSchools = [];
+let schoolDropdownIdx = -1;
+let activeLogSource = null;
+let currentLogOrderId = null;
+let currentLogLoaded = 0;  // 已加载行数（从末尾算）
+let currentLogTotal = 0;
+
+// ── Tab ───────────────────────────────────────────────────────────────────────
+
+function switchTab(name) {
+  const names = ['order', 'accounts', 'plans', 'admin'];
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', names[i] === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'plans') loadPlans();
+  if (name === 'admin') loadAdminUsers();
+}
+
+// ── 初始化 ────────────────────────────────────────────────────────────────────
+
+let allAccounts = [];
+
+async function init() {
+  allSchools = await api('/api/schools');
+  renderDropdown('');
+  const saved = localStorage.getItem('lastDistance');
+  if (saved) document.getElementById('order-distance').value = saved;
+  try { allAccounts = await api('/api/accounts'); } catch(e) {}
+  // 初始化定时跑步区域（隐藏滑块）
+  onScheduledToggle(document.getElementById('scheduled-enable'));
+}
+
+function autoFillRecordSchool(username) {
+  const acc = allAccounts.find(a => a.username === username.trim());
+  if (!acc) return;
+  document.getElementById('record-school-id-val').value = acc.school_id;
+  document.getElementById('record-school-search').value = acc.school_name;
+}
+
+// ── 学校搜索下拉 ──────────────────────────────────────────────────────────────
+
+function renderDropdown(query) {
+  const dd = document.getElementById('school-dropdown');
+  const q = query.trim().toLowerCase();
+  const filtered = q ? allSchools.filter(s => s.school_name.toLowerCase().includes(q)) : allSchools;
+  if (!filtered.length) {
+    dd.innerHTML = '<div class="search-empty">无匹配学校</div>';
+  } else {
+    dd.innerHTML = filtered.slice(0, 80).map((s, i) =>
+      `<div class="search-option" data-id="${s.school_id}" data-name="${s.school_name}"
+            onmousedown="selectSchool(${s.school_id}, '${s.school_name.replace(/'/g,"\\'")}')">
+        ${s.school_name}<span class="school-type">${s.sys_type_label}</span>
+      </div>`
+    ).join('');
+  }
+  schoolDropdownIdx = -1;
+}
+
+function filterSchools() {
+  const q = document.getElementById('school-search').value;
+  renderDropdown(q);
+  document.getElementById('school-id-val').value = '';
+}
+
+function openDropdown() {
+  renderDropdown(document.getElementById('school-search').value);
+  document.getElementById('school-dropdown').classList.add('open');
+}
+
+function closeDropdown() {
+  setTimeout(() => document.getElementById('school-dropdown').classList.remove('open'), 150);
+}
+
+function selectSchool(id, name) {
+  document.getElementById('school-id-val').value = id;
+  document.getElementById('school-search').value = name;
+  document.getElementById('school-dropdown').classList.remove('open');
+}
+
+function schoolKeydown(e) {
+  const dd = document.getElementById('school-dropdown');
+  const opts = dd.querySelectorAll('.search-option');
+  if (!opts.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    schoolDropdownIdx = Math.min(schoolDropdownIdx + 1, opts.length - 1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    schoolDropdownIdx = Math.max(schoolDropdownIdx - 1, 0);
+  } else if (e.key === 'Enter' && schoolDropdownIdx >= 0) {
+    e.preventDefault();
+    opts[schoolDropdownIdx].dispatchEvent(new MouseEvent('mousedown'));
+    return;
+  } else { return; }
+  opts.forEach((o, i) => o.classList.toggle('active', i === schoolDropdownIdx));
+  opts[schoolDropdownIdx]?.scrollIntoView({ block: 'nearest' });
+}
+
+// ── 人脸图片 ──────────────────────────────────────────────────────────────────
+
+function onFaceSelected(input) {
+  const file = input.files[0];
+  const label = document.getElementById('face-label');
+  const labelText = document.getElementById('face-label-text');
+  const previewWrap = document.getElementById('face-preview-wrap');
+  const preview = document.getElementById('face-preview');
+  if (file) {
+    labelText.textContent = file.name;
+    label.classList.add('has-file');
+    const reader = new FileReader();
+    reader.onload = e => { preview.src = e.target.result; previewWrap.style.display = 'block'; };
+    reader.readAsDataURL(file);
+  } else {
+    labelText.textContent = '点击选择图片（jpg / png）';
+    label.classList.remove('has-file');
+    previewWrap.style.display = 'none';
+  }
+}
+
+// ── 下单 ──────────────────────────────────────────────────────────────────────
+
+function onTotalDistanceChange() {
+  const val = document.getElementById('order-total-distance').value.trim();
+  if (!val) {
+    // 清空总距离时重置定时状态
+    const cb = document.getElementById('scheduled-enable');
+    cb.checked = false;
+    onScheduledToggle(cb);
+  }
+}
+
+function onScheduledToggle(cb) {
+  const slider = document.getElementById('order-scheduled-slider');
+  const badge = document.getElementById('scheduled-badge');
+  const track = document.querySelector('.time-slider-track');
+  const labels = document.querySelector('.time-slider-labels');
+  slider.disabled = !cb.checked;
+  track.style.display = cb.checked ? '' : 'none';
+  labels.style.display = cb.checked ? '' : 'none';
+  if (cb.checked) {
+    badge.classList.remove('time-slider-off');
+    onScheduledSlider(slider);
+  } else {
+    badge.classList.add('time-slider-off');
+    badge.textContent = '不定时';
+    slider.style.setProperty('--pct', '0%');
+  }
+}
+
+function onScheduledSlider(slider) {
+  const badge = document.getElementById('scheduled-badge');
+  const totalMinutes = 8 * 60 + Math.round(parseInt(slider.value) * (14 * 60 / 84));
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  badge.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  const pct = (parseInt(slider.value) / 84 * 100).toFixed(1);
+  slider.style.setProperty('--pct', pct + '%');
+}
+
+async function placeOrder() {
+  const schoolId = document.getElementById('school-id-val').value;
+  const username = document.getElementById('order-username').value.trim();
+  const password = document.getElementById('order-password').value.trim();
+  const runType = document.getElementById('order-run-type').value;
+  const distance = parseFloat(document.getElementById('order-distance').value);
+  const totalRaw = document.getElementById('order-total-distance').value.trim();
+  const totalDistance = totalRaw ? parseFloat(totalRaw) : null;
+  const useImageBed = document.getElementById('order-use-image-bed').checked;
+  const scheduledEnabled = document.getElementById('scheduled-enable').checked;
+  const scheduledSlider = document.getElementById('order-scheduled-slider');
+  const faceInput = document.getElementById('face-input');
+  const msgEl = document.getElementById('order-msg');
+  const btn = document.getElementById('btn-place');
+
+  if (!schoolId) { showMsg(msgEl, '请选择学校', 'error'); return; }
+  if (!username) { showMsg(msgEl, '请输入用户名', 'error'); return; }
+  if (!password) { showMsg(msgEl, '请输入密码', 'error'); return; }
+  if (!distance || distance <= 0) { showMsg(msgEl, '请输入有效每次距离', 'error'); return; }
+  if (totalDistance !== null && totalDistance < distance) {
+    showMsg(msgEl, '总距离不能小于每次距离', 'error'); return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '授权并提交中...';
+  try {
+    const form = new FormData();
+    form.append('school_id', schoolId);
+    form.append('username', username);
+    form.append('password', password);
+    form.append('run_type', runType);
+    form.append('distance', distance);
+    if (totalDistance !== null) form.append('total_distance', totalDistance);
+    if (useImageBed) form.append('use_image_bed', 'true');
+    if (scheduledEnabled) {
+      const scheduledHour = 8 + parseInt(scheduledSlider.value) * (14 / 84);
+      form.append('scheduled_hour', scheduledHour.toFixed(4));
+    }
+    if (faceInput.files[0]) form.append('face_image', faceInput.files[0]);
+
+    const token = localStorage.getItem('auth_token');
+    const res = await fetch('/api/orders/place', { method: 'POST', body: form, headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+    if (res.status === 401) { localStorage.removeItem('auth_token'); showLogin(); throw new Error('登录已过期，请重新登录'); }
+    const text = await res.text();
+    let data;
+    try { data = text ? JSON.parse(text) : {}; } catch { data = { detail: text || '响应解析失败' }; }
+    if (!res.ok) throw new Error(data.detail || `请求失败 (${res.status})`);
+
+    const msg = data.type === 'plan'
+      ? `计划已创建 (ID: ${data.id})，${data.message}`
+      : `订单已创建 (ID: ${data.id})，跑步任务正在后台执行`;
+    showMsg(msgEl, msg, 'success');
+    if (data.type === 'plan') { const me = await api('/api/auth/me').catch(() => null); if (me) updateCredits(me.credits); }
+    document.getElementById('order-username').value = '';
+    document.getElementById('order-password').value = '';
+    document.getElementById('order-total-distance').value = '';
+    document.getElementById('scheduled-enable').checked = false;
+    onScheduledToggle(document.getElementById('scheduled-enable'));
+    document.getElementById('face-input').value = '';
+    onFaceSelected(document.getElementById('face-input'));
+  } catch (e) {
+    showMsg(msgEl, e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '提交订单';
+  }
+}
+
+// ── 订单列表 ──────────────────────────────────────────────────────────────────
+
+const STATUS_LABELS = { pending: '等待中', running: '跑步中', completed: '已完成', failed: '失败' };
+let _allOrders = [];
+
+async function loadOrders() {
+  const data = await api('/api/orders');
+  _allOrders = data;
+  renderOrders();
+  document.getElementById('refresh-hint').textContent =
+    `上次刷新: ${new Date().toLocaleTimeString()}，每 10 秒自动刷新`;
+}
+
+function renderOrders() {
+  const query = (document.getElementById('orders-filter')?.value || '').trim().toLowerCase();
+  // 把 20260503 / 202605 / 0503 等无分隔符日期转成带连字符形式
+  const normalize = s => s.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3')
+                           .replace(/^(\d{4})(\d{2})$/, '$1-$2')
+                           .replace(/^(\d{2})(\d{2})$/, '$1-$2');
+  const keywords = query ? query.split(/\s+/).filter(Boolean).map(normalize) : [];
+  const tbody = document.getElementById('orders-tbody');
+  const empty = document.getElementById('orders-empty');
+
+  const filtered = keywords.length ? _allOrders.filter(o => {
+    const haystack = [o.username, o.school_name, o.run_type_label,
+                      STATUS_LABELS[o.status] || o.status,
+                      o.created_at || '', o.completed_at || ''].join(' ').toLowerCase();
+    return keywords.every(k => haystack.includes(k));
+  }) : _allOrders;
+
+  if (!filtered.length) { tbody.innerHTML = ''; empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  tbody.innerHTML = filtered.map(o => `
+    <tr>
+      <td>${o.id}</td>
+      <td>${o.username}</td>
+      <td class="hide-mobile">${o.school_name}</td>
+      <td class="hide-mobile">${o.run_type_label}</td>
+      <td>${o.distance} km</td>
+      <td><span class="badge badge-${o.status}">${STATUS_LABELS[o.status] || o.status}</span></td>
+      <td class="hide-mobile">${o.created_at || ''}</td>
+      <td class="hide-mobile">${o.completed_at || ''}</td>
+      <td style="white-space:nowrap">
+        ${(o.status === 'failed' || o.status === 'completed') ? `<button class="btn btn-ghost btn-sm btn-retry" onclick="retryOrder(${o.id}, this)" style="margin-right:4px;color:#c5221f;border-color:#f5c6c4">重跑</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="openLogModal(${o.id}, '${o.status}', '${o.username}')">
+          查看日志
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+
+async function retryOrder(orderId, btn) {
+  btn.disabled = true;
+  btn.textContent = '提交中...';
+  try {
+    const data = await api(`/api/orders/${orderId}/retry`, 'POST');
+    btn.textContent = '已重跑';
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '重跑';
+    alert('重跑失败: ' + e.message);
+  }
+}
+
+// ── 跑步记录学校搜索下拉 ──────────────────────────────────────────────────────
+
+let recordSchoolDropdownIdx = -1;
+
+function renderRecordDropdown(query) {
+  const dd = document.getElementById('record-school-dropdown');
+  const q = query.trim().toLowerCase();
+  const filtered = q ? allSchools.filter(s => s.school_name.toLowerCase().includes(q)) : allSchools;
+  if (!filtered.length) {
+    dd.innerHTML = '<div class="search-empty">无匹配学校</div>';
+  } else {
+    dd.innerHTML = filtered.slice(0, 80).map((s) =>
+      `<div class="search-option" data-id="${s.school_id}" data-name="${s.school_name}"
+            onmousedown="selectRecordSchool(${s.school_id}, '${s.school_name.replace(/'/g,"\\'")}')">
+        ${s.school_name}<span class="school-type">${s.sys_type_label}</span>
+      </div>`
+    ).join('');
+  }
+  recordSchoolDropdownIdx = -1;
+}
+
+function filterRecordSchools() {
+  renderRecordDropdown(document.getElementById('record-school-search').value);
+  document.getElementById('record-school-id-val').value = '';
+}
+
+function openRecordDropdown() {
+  renderRecordDropdown(document.getElementById('record-school-search').value);
+  document.getElementById('record-school-dropdown').classList.add('open');
+}
+
+function closeRecordDropdown() {
+  setTimeout(() => document.getElementById('record-school-dropdown').classList.remove('open'), 150);
+}
+
+function selectRecordSchool(id, name) {
+  document.getElementById('record-school-id-val').value = id;
+  document.getElementById('record-school-search').value = name;
+  document.getElementById('record-school-dropdown').classList.remove('open');
+}
+
+function recordSchoolKeydown(e) {
+  const dd = document.getElementById('record-school-dropdown');
+  const opts = dd.querySelectorAll('.search-option');
+  if (!opts.length) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); recordSchoolDropdownIdx = Math.min(recordSchoolDropdownIdx + 1, opts.length - 1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); recordSchoolDropdownIdx = Math.max(recordSchoolDropdownIdx - 1, 0); }
+  else if (e.key === 'Enter' && recordSchoolDropdownIdx >= 0) { e.preventDefault(); opts[recordSchoolDropdownIdx].dispatchEvent(new MouseEvent('mousedown')); return; }
+  else { return; }
+  opts.forEach((o, i) => o.classList.toggle('active', i === recordSchoolDropdownIdx));
+  opts[recordSchoolDropdownIdx]?.scrollIntoView({ block: 'nearest' });
+}
+
+// ── 跑步记录查询 ──────────────────────────────────────────────────────────────
+
+let _recordSchoolId = '';
+let _recordUsername = '';
+let _recordPassword = '';
+
+async function queryRunRecords(date = '') {
+  const schoolId = document.getElementById('record-school-id-val').value;
+  const username = document.getElementById('record-username').value.trim();
+  const password = document.getElementById('record-password').value.trim();
+  const msgEl = document.getElementById('record-msg');
+  const btn = document.getElementById('btn-query-records');
+
+  if (!date) {
+    if (!schoolId) { showMsg(msgEl, '请选择学校', 'error'); return; }
+    if (!username) { showMsg(msgEl, '请输入学号', 'error'); return; }
+    _recordSchoolId = schoolId;
+    _recordUsername = username;
+    _recordPassword = password;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '查询中...';
+  document.getElementById('record-result-card').style.display = 'none';
+
+  try {
+    let qs = `username=${encodeURIComponent(_recordUsername)}&school_id=${_recordSchoolId}`;
+    if (date) qs += `&date=${date}`;
+    if (_recordPassword) qs += `&password=${encodeURIComponent(_recordPassword)}`;
+    const data = await api(`/api/run-records?${qs}`);
+    document.getElementById('record-result-title').textContent = `${data.school_name} — ${data.username}`;
+
+    // 月份切换按钮
+    const datesWrap = document.getElementById('record-dates-wrap');
+    datesWrap.innerHTML = (data.dates || []).map(d =>
+      `<button class="btn btn-ghost btn-sm${d.date === date ? ' active' : ''}"
+        style="${d.date === date ? 'background:#e8f0fe;border-color:#1a73e8;color:#1a73e8' : ''}"
+        onclick="queryRunRecords('${d.date}')">${d.date}（${d.count}次）</button>`
+    ).join('');
+
+    const tbody = document.getElementById('records-tbody');
+    const empty = document.getElementById('records-empty');
+    if (!data.records.length) {
+      tbody.innerHTML = '';
+      empty.style.display = '';
+    } else {
+      empty.style.display = 'none';
+      tbody.innerHTML = data.records.map(r => `
+        <tr>
+          <td>${r.date}</td>
+          <td>${r.run_type}</td>
+          <td>${r.distance} km</td>
+          <td class="hide-mobile">${r.duration}</td>
+          <td class="hide-mobile">${r.pace}</td>
+          <td><span class="badge ${r.status === '合格' ? 'badge-completed' : r.status === '不合格' ? 'badge-failed' : 'badge-pending'}">${r.status}</span></td>
+        </tr>`).join('');
+    }
+    document.getElementById('record-result-card').style.display = '';
+    msgEl.textContent = '';
+  } catch (e) {
+    showMsg(msgEl, e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '查询跑步记录';
+  }
+}
+
+// ── 日志模态框 ────────────────────────────────────────────────────────────────
+
+function openLogModal(orderId, status, username) {
+  document.getElementById('log-modal-title').textContent = `跑步日志 — 订单 #${orderId} (${username})`;
+  document.getElementById('log-box').innerHTML = '';
+  document.getElementById('log-status').textContent = '加载中...';
+  document.getElementById('btn-load-more').style.display = 'none';
+  document.getElementById('log-modal').classList.add('open');
+
+  if (activeLogSource) { activeLogSource.close(); activeLogSource = null; }
+  currentLogOrderId = orderId;
+  currentLogLoaded = 0;
+  currentLogTotal = 0;
+
+  if (status === 'running') {
+    // running 状态只走轮询，不额外调 fetchLogs（避免 currentLogLoaded 状态错乱）
+    const pollFn = async () => {
+      const box = document.getElementById('log-box');
+      const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+      const data = await api(`/api/orders/${orderId}/logs?tail=0`).catch(() => null);
+      if (!data) return;
+      box.innerHTML = '';
+      data.lines.forEach(l => { if (!l) return; const s = document.createElement('span'); s.className = 'log-line ' + logLevel(l); s.textContent = l + '\n'; box.appendChild(s); });
+      if (atBottom) box.scrollTop = box.scrollHeight;
+      document.getElementById('log-status').textContent = `共 ${data.total} 行，每 5 秒刷新`;
+      const order = await api(`/api/orders/${orderId}`).catch(() => null);
+      if (order && order.status !== 'running') {
+        clearInterval(activeLogSource._timer); activeLogSource = null;
+        document.getElementById('log-status').textContent = `已结束，共 ${data.total} 行`;
+      }
+    };
+    pollFn();  // 立即执行一次，不等 5 秒
+    activeLogSource = { _timer: setInterval(pollFn, 5000), close() { clearInterval(this._timer); } };
+  } else {
+    fetchLogs(orderId, 0);
+  }
+}
+
+async function fetchLogs(orderId, offset) {
+  try {
+    const data = await api(`/api/orders/${orderId}/logs?tail=100&offset=${offset}`);
+    currentLogTotal = data.total;
+    currentLogLoaded = (currentLogTotal - offset);  // 已加载到的位置（从末尾）
+
+    const box = document.getElementById('log-box');
+    const scrollBottom = box.scrollHeight - box.scrollTop;
+
+    // 把新行插到顶部
+    const frag = document.createDocumentFragment();
+    data.lines.forEach(l => {
+      if (!l) return;
+      const span = document.createElement('span');
+      span.className = 'log-line ' + logLevel(l);
+      span.textContent = l + '\n';
+      frag.appendChild(span);
+    });
+    box.insertBefore(frag, box.firstChild);
+
+    // 保持滚动位置（插入顶部后补偿）
+    if (offset > 0) {
+      box.scrollTop = box.scrollHeight - scrollBottom;
+    } else {
+      scrollLogToBottom();
+    }
+
+    const btnMore = document.getElementById('btn-load-more');
+    if (data.has_more) {
+      btnMore.style.display = '';
+    } else {
+      btnMore.style.display = 'none';
+    }
+    document.getElementById('log-status').textContent =
+      `显示第 ${currentLogTotal - currentLogLoaded + 1}–${currentLogTotal} 行，共 ${currentLogTotal} 行`;
+  } catch (e) {
+    document.getElementById('log-status').textContent = '加载失败: ' + e.message;
+  }
+}
+
+async function loadMoreLogs() {
+  const btn = document.getElementById('btn-load-more');
+  btn.disabled = true;
+  btn.textContent = '加载中...';
+  await fetchLogs(currentLogOrderId, currentLogLoaded);
+  btn.disabled = false;
+  btn.textContent = '加载更多';
+}
+
+function appendLog(line) {
+  const box = document.getElementById('log-box');
+  const span = document.createElement('span');
+  span.className = 'log-line ' + logLevel(line);
+  span.textContent = line + '\n';
+  box.appendChild(span);
+  // 自动滚底（如果用户没有手动上翻）
+  if (box.scrollHeight - box.scrollTop - box.clientHeight < 80) {
+    box.scrollTop = box.scrollHeight;
+  }
+}
+
+function logLevel(line) {
+  const l = line.toLowerCase();
+  if (l.includes('error') || l.includes('失败') || l.includes('exception')) return 'err';
+  if (l.includes('warn') || l.includes('警告')) return 'warn';
+  if (l.includes('debug')) return 'debug';
+  return 'info';
+}
+
+function scrollLogToBottom() {
+  const box = document.getElementById('log-box');
+  box.scrollTop = box.scrollHeight;
+}
+
+function closeLogModal(e) {
+  if (e && e.target !== document.getElementById('log-modal')) return;
+  document.getElementById('log-modal').classList.remove('open');
+  if (activeLogSource) { activeLogSource.close(); activeLogSource = null; }
+}
+
+// ── 工具 ──────────────────────────────────────────────────────────────────────
+
+async function api(url, method = 'GET', body = null) {
+  const token = localStorage.getItem('auth_token');
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (res.status === 401) {
+    localStorage.removeItem('auth_token');
+    showLogin();
+    throw new Error('登录已过期，请重新登录');
+  }
+  const text = await res.text();
+  let data;
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { detail: text || '响应解析失败' }; }
+  if (!res.ok) throw new Error(data.detail || `请求失败 (${res.status})`);
+  return data;
+}
+
+function showMsg(el, text, type) {
+  el.className = 'msg msg-' + (type === 'error' ? 'error' : 'success');
+  el.textContent = text;
+  setTimeout(() => { el.textContent = ''; el.className = ''; }, 6000);
+}
+
+// ── 计划任务 ──────────────────────────────────────────────────────────────────
+
+const PLAN_STATUS_LABELS = { active: '进行中', completed: '已完成', cancelled: '已取消' };
+
+const DAY_STATUS_META = {
+  pending:    { label: '待执行',  cls: 'badge-pending' },
+  due:        { label: '即将执行', cls: 'badge-running-now' },
+  running:    { label: '执行中',  cls: 'badge-running-now' },
+  success:    { label: '成功',    cls: 'badge-completed' },
+  week_limit: { label: '周上限',  cls: 'badge-week-limit' },
+  day_limit:  { label: '日上限',  cls: 'badge-day-limit' },
+  face_error: { label: '人脸错误', cls: 'badge-face-error' },
+  cheating:   { label: '作弊',    cls: 'badge-cheating' },
+  other:      { label: '其他失败', cls: 'badge-failed' },
+};
+
+function dayStatusBadge(s, scheduledHour) {
+  // pending 状态下，若在计划时间前后 20 分钟窗口内则显示"即将执行"
+  if (s === 'pending' && scheduledHour != null) {
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const planMin = Math.round(scheduledHour * 60);
+    if (nowMin >= planMin - 20 && nowMin <= planMin + 20) s = 'due';
+  }
+  const m = DAY_STATUS_META[s] || DAY_STATUS_META.other;
+  return `<span class="badge ${m.cls}">${m.label}</span>`;
+}
+
+const PLANS_PAGE_SIZE = 50;
+let _plansActivePage = 0;
+let _plansActiveAll = [];
+
+async function loadPlans() {
+  const data = await api('/api/plans');
+
+  _plansActiveAll = data.filter(p => p.status === 'active');
+  const other  = data.filter(p => p.status !== 'active');
+
+  renderActivePlans();
+
+  const tbodyOther = document.getElementById('plans-tbody-other');
+  const emptyOther = document.getElementById('plans-empty-other');
+  if (!other.length) { tbodyOther.innerHTML = ''; emptyOther.style.display = ''; }
+  else {
+    emptyOther.style.display = 'none';
+    tbodyOther.innerHTML = other.map(p => {
+      return `<tr>
+      <td>${p.id}</td>
+      <td>${p.username}</td>
+      <td class="hide-mobile">${p.password || '—'}</td>
+      <td class="hide-mobile">${p.school_name}</td>
+      <td class="hide-mobile">${p.daily_limit} km/天</td>
+      <td><span class="badge ${p.status === 'completed' ? 'badge-completed' : p.status === 'cancelled' ? 'badge-cancelled' : 'badge-failed'}">${PLAN_STATUS_LABELS[p.status] || p.status}</span></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openPlanDetail(${p.id},'${p.username}')">详情</button></td>
+    </tr>`;
+    }).join('');
+  }
+}
+
+function makeProgress(p) {
+  const pct = p.total_distance > 0 ? Math.min(100, (p.completed_distance / p.total_distance * 100)).toFixed(0) : 0;
+  const isDone = p.status === 'completed';
+  const done = p.completed_distance.toFixed(1).replace(/\.0$/, '');
+  const total = p.total_distance.toString().replace(/\.0$/, '');
+  return `<div class="progress-wrap">
+    <div class="progress-bar progress-bar-desktop"><div class="progress-fill${isDone ? ' done' : ''}" style="width:${pct}%"></div></div>
+    <span class="progress-text">${done}/${total}km</span>
+  </div>`;
+}
+
+function renderActivePlans() {
+  const total = _plansActiveAll.length;
+  const totalPages = Math.ceil(total / PLANS_PAGE_SIZE) || 1;
+  if (_plansActivePage >= totalPages) _plansActivePage = totalPages - 1;
+  const page = _plansActiveAll.slice(_plansActivePage * PLANS_PAGE_SIZE, (_plansActivePage + 1) * PLANS_PAGE_SIZE);
+
+  document.getElementById('plans-page-info').textContent = total > PLANS_PAGE_SIZE
+    ? `第 ${_plansActivePage + 1}/${totalPages} 页，共 ${total} 条` : `共 ${total} 条`;
+  document.getElementById('btn-plans-prev').style.display = _plansActivePage > 0 ? '' : 'none';
+  document.getElementById('btn-plans-next').style.display = _plansActivePage < totalPages - 1 ? '' : 'none';
+
+  const tbodyActive = document.getElementById('plans-tbody-active');
+  const emptyActive = document.getElementById('plans-empty-active');
+  if (!page.length) { tbodyActive.innerHTML = ''; emptyActive.style.display = ''; return; }
+  emptyActive.style.display = 'none';
+  tbodyActive.innerHTML = page.map(p => {
+    let scheduledLabel = '—';
+    if (p.scheduled_hour != null) {
+      const h = Math.floor(p.scheduled_hour);
+      const m = Math.round((p.scheduled_hour - h) * 60);
+      scheduledLabel = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    }
+    return `<tr>
+    <td>${p.id}</td>
+    <td class="col-account">${p.username}</td>
+    <td class="hide-mobile">${p.password || '—'}</td>
+    <td class="hide-mobile">${p.school_name}</td>
+    <td>${makeProgress(p)}</td>
+    <td class="hide-mobile">${p.daily_limit} km/天</td>
+    <td class="hide-mobile">${scheduledLabel}</td>
+    <td>${dayStatusBadge(p.today_status, p.scheduled_hour)}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-ghost btn-sm" style="margin-right:4px" onclick="openPlanDetail(${p.id},'${p.username}')">详情</button>
+      <button class="btn btn-ghost btn-sm" style="margin-right:4px;color:#1a73e8;border-color:#c5d9f7" onclick="runPlanNow(${p.id},this)">重跑</button>
+      <button class="btn btn-ghost btn-sm" style="color:#c5221f;border-color:#f5c6c4" onclick="cancelPlan(${p.id},this)">取消</button>
+    </td>
+  </tr>`;
+  }).join('');
+}
+
+function changePlansPage(dir) {
+  _plansActivePage += dir;
+  renderActivePlans();
+  document.getElementById('panel-plans').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+
+async function runPlanNow(planId, btn) {
+  btn.disabled = true;
+  btn.textContent = '触发中...';
+  try {
+    await api(`/api/plans/${planId}/run-now`, 'POST');
+    btn.textContent = '已触发';
+    setTimeout(() => { btn.disabled = false; btn.textContent = '重跑'; loadPlans(); }, 1500);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '重跑';
+    alert('触发失败: ' + e.message);
+  }
+}
+
+async function cancelPlan(planId, btn) {
+  btn.disabled = true;
+  try {
+    const data = await api(`/api/plans/${planId}`, 'DELETE');
+    if (data.refund > 0) {
+      const me = await api('/api/auth/me').catch(() => null);
+      if (me) updateCredits(me.credits);
+    }
+    loadPlans();
+  } catch (e) {
+    btn.disabled = false;
+    alert('取消失败: ' + e.message);
+  }
+}
+
+async function retryFailedPlans(btn) {
+  btn.disabled = true;
+  btn.textContent = '处理中...';
+  try {
+    const data = await api('/api/plans/retry-failed', 'POST');
+    btn.textContent = data.retriggered > 0 ? `已重跑 ${data.retriggered} 个` : '无可重跑';
+    setTimeout(() => { btn.disabled = false; btn.textContent = '重跑失败订单'; loadPlans(); }, 2000);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '重跑失败订单';
+    alert('操作失败: ' + e.message);
+  }
+}
+
+async function openPlanDetail(planId, username) {
+  document.getElementById('plan-detail-title').textContent = `计划 #${planId} — ${username} 跑步记录`;
+  document.getElementById('plan-detail-list').innerHTML = '';
+  document.getElementById('plan-detail-tbody').innerHTML = '';
+  document.getElementById('plan-detail-empty').style.display = 'none';
+  document.getElementById('plan-detail-loading').style.display = '';
+  document.getElementById('plan-detail-modal').classList.add('open');
+
+  try {
+    const orders = await api(`/api/plans/${planId}/orders`);
+    document.getElementById('plan-detail-loading').style.display = 'none';
+    if (!orders.length) {
+      document.getElementById('plan-detail-empty').style.display = '';
+      return;
+    }
+    const hasError = s => ['week_limit','day_limit','face_error','cheating','other'].includes(s);
+    document.getElementById('plan-detail-tbody').innerHTML = orders.map(o => `
+      <tr>
+        <td>${o.distance} km</td>
+        <td>${dayStatusBadge(o.day_status)}${hasError(o.day_status) ? `<span style="font-size:11px;color:#999;margin-left:3px" title="${o.error_msg}">ⓘ</span>` : ''}</td>
+        <td>${o.completed_at || '—'}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="openLogModal(${o.id},'${o.status === 'running' ? 'running' : 'done'}','${username}');closePlanDetailModal()">日志</button></td>
+      </tr>`).join('');
+  } catch (e) {
+    document.getElementById('plan-detail-loading').textContent = '加载失败: ' + e.message;
+  }
+}
+
+function closePlanDetailModal(e) {
+  if (e && e.target !== document.getElementById('plan-detail-modal')) return;
+  document.getElementById('plan-detail-modal').classList.remove('open');
+}
+
+
+// ── 管理员功能 ────────────────────────────────────────────────────────────────
+
+async function loadAdminUsers() {
+  const tbody = document.getElementById('admin-users-tbody');
+  const empty = document.getElementById('admin-users-empty');
+  try {
+    const users = await api('/api/admin/users');
+    if (!users.length) { tbody.innerHTML = ''; empty.style.display = ''; return; }
+    empty.style.display = 'none';
+    tbody.innerHTML = users.map(u => `
+      <tr>
+        <td>${u.username}</td>
+        <td>${u.is_admin ? '<span class="badge badge-running-now">管理员</span>' : '普通用户'}</td>
+        <td><span id="credits-${u.id}">${u.credits.toFixed(1)}</span> 渔货</td>
+        <td>${u.completed_km} km</td>
+        <td>${u.ordered_km} km</td>
+        <td style="white-space:nowrap">
+          <input type="number" id="adj-${u.id}" step="0.1" style="width:80px;padding:4px 6px;border:1px solid #d0d0d0;border-radius:4px;font-size:13px" placeholder="±数量">
+          <button class="btn btn-ghost btn-sm" style="margin-left:4px" onclick="adjustCredits(${u.id}, this)">确认</button>
+        </td>
+        <td>${u.is_admin ? '—' : `<button class="btn btn-ghost btn-sm" style="color:#c5221f;border-color:#f5c6c4" onclick="deleteWebUser(${u.id},'${u.username}',this)">删除</button>`}</td>
+      </tr>`).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#c5221f">加载失败: ${e.message}</td></tr>`;
+  }
+}
+
+async function adjustCredits(userId, btn) {
+  const input = document.getElementById('adj-' + userId);
+  const amount = parseFloat(input.value);
+  if (isNaN(amount) || amount === 0) { alert('请输入有效数量（正数增加，负数减少）'); return; }
+  btn.disabled = true;
+  try {
+    const data = await api('/api/admin/credits', 'POST', { user_id: userId, amount });
+    document.getElementById('credits-' + userId).textContent = data.credits.toFixed(1);
+    input.value = '';
+  } catch (e) {
+    alert('操作失败: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteWebUser(userId, username, btn) {
+  if (!confirm(`确认删除账号 "${username}"？此操作不可恢复。`)) return;
+  btn.disabled = true;
+  try {
+    await api(`/api/admin/users/${userId}`, 'DELETE');
+    loadAdminUsers();
+  } catch (e) {
+    btn.disabled = false;
+    alert('删除失败: ' + e.message);
+  }
+}
+
+async function createWebUser() {
+  const username = document.getElementById('new-user-username').value.trim();
+  const password = document.getElementById('new-user-password').value;
+  const credits = parseFloat(document.getElementById('new-user-credits').value) || 0;
+  const msg = document.getElementById('new-user-msg');
+  const btn = document.getElementById('new-user-btn');
+  if (!username || !password) { msg.style.display=''; msg.style.color='#c5221f'; msg.textContent='用户名和密码不能为空'; return; }
+  btn.disabled = true;
+  msg.style.display = 'none';
+  try {
+    const data = await api('/api/admin/users', 'POST', { username, password, credits });
+    msg.style.display = '';
+    msg.style.color = '#1e8e3e';
+    msg.textContent = `账号 ${data.username} 创建成功，初始渔货 ${data.credits}`;
+    document.getElementById('new-user-username').value = '';
+    document.getElementById('new-user-password').value = '';
+    document.getElementById('new-user-credits').value = '0';
+    loadAdminUsers();
+  } catch (e) {
+    msg.style.display = '';
+    msg.style.color = '#c5221f';
+    msg.textContent = '创建失败: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── 认证 ──────────────────────────────────────────────────────────────────────
+
+function showLogin() {
+  document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('main-content').style.display = 'none';
+}
+
+let _isAdmin = false;
+let _myCredits = 0;
+
+function showApp(username, isAdmin, credits) {
+  _isAdmin = isAdmin;
+  _myCredits = credits || 0;
+  document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('main-content').style.display = '';
+  const label = username + (isAdmin ? ' (管理员)' : '');
+  document.getElementById('header-username').textContent = label;
+  document.getElementById('header-credits').innerHTML = '<span class="header-credits-icon">🎣 </span>' + _myCredits.toFixed(1) + ' 渔货';
+  document.getElementById('tab-admin').style.display = isAdmin ? '' : 'none';
+}
+
+function updateCredits(credits) {
+  _myCredits = credits;
+  document.getElementById('header-credits').innerHTML = '<span class="header-credits-icon">🎣 </span>' + _myCredits.toFixed(1) + ' 渔货';
+}
+
+function logout() {
+  localStorage.removeItem('auth_token');
+  showLogin();
+}
+
+async function doLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.textContent = '登录中...';
+  try {
+    const body = new URLSearchParams({ username, password });
+    const resp = await fetch('/api/auth/login', { method: 'POST', body });
+    const data = await resp.json();
+    if (!resp.ok) {
+      errEl.textContent = data.detail || '登录失败';
+      errEl.style.display = 'block';
+      return;
+    }
+    localStorage.setItem('auth_token', data.access_token);
+    const me = await fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + data.access_token } });
+    const meData = await me.json();
+    showApp(meData.username, meData.is_admin, meData.credits);
+    init();
+  } catch (e) {
+    errEl.textContent = '网络错误';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '登录';
+  }
+}
+
+document.getElementById('login-btn').addEventListener('click', doLogin);
+document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+(async function checkAuth() {
+  const token = localStorage.getItem('auth_token');
+  if (!token) { showLogin(); return; }
+  try {
+    const resp = await fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!resp.ok) { localStorage.removeItem('auth_token'); showLogin(); return; }
+    const me = await resp.json();
+    showApp(me.username, me.is_admin, me.credits);
+    init();
+  } catch (e) {
+    showLogin();
+  }
+})();
+</script>
+</body>
+</html>

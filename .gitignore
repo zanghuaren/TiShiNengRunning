@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pyo
+tsn_data.db
+face_images/
+order_logs/
+log.txt
+*.log
+.env

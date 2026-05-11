@@ -39,6 +39,10 @@ async def getPublicVersionClient(accountModel: TsnAccount_Model):
                 await updateAccessToken(accountModel.id, newDb, freshTokenResp['access_token'],
                                         freshTokenResp['refresh_token'], freshTokenResp['expires_in'])
             tsn.setToken(freshTokenResp['access_token'])
+        else:
+            # refresh_token 失效（Invalid refresh token 等），直接用密码重新登录
+            logger.info(f"refresh_token 失效 ({freshTokenResp.get('msg', '')}), 重新密码登录")
+            raise TiShiNengError("refresh_token 失效", 401)
     except TiShiNengError as e:
         if e.code == 401:
             logger.info("token失效，重新获取")
@@ -91,6 +95,10 @@ async def getPrivateVersionClient(accountModel: TsnAccount_Model):
 
 async def getTsnClientById(accountId, session):
     account: TsnAccount_Model = await getTsnAccountByid(accountId, session)
+    if account is None:
+        raise TiShiNengError(f"账号 {accountId} 不存在", 10001)
+    if account.school is None:
+        raise TiShiNengError(f"账号 {accountId} 未关联学校", 10001)
     if account.school.sys_type == 2:
         return await getPublicVersionClient(account)
     elif account.school.sys_type == 1:
@@ -101,6 +109,10 @@ async def getTsnClientById(accountId, session):
 
 async def getTsnClientByUid(uid, session):
     account: TsnAccount_Model = await getTsnAccountByUid(uid, session)
+    if account is None:
+        raise TiShiNengError(f"账号 uid={uid} 不存在", 10001)
+    if account.school is None:
+        raise TiShiNengError(f"账号 uid={uid} 未关联学校", 10001)
     if account.school.sys_type == 2:
         return await getPublicVersionClient(account)
     elif account.school.sys_type == 1:

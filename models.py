@@ -3,7 +3,7 @@ SQLAlchemy 数据库模型定义
 """
 import uuid
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, Index, UniqueConstraint, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, Index, UniqueConstraint, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -60,6 +60,7 @@ class TsnAccount_Model(Base):
     expires_in = Column(Integer, nullable=False)
 
     auth_code = Column(String(128), default=getUUID4Str)
+    managed_by = Column(String(64), nullable=True, index=True)
 
 
 class TsnSchool_Model(Base):
@@ -82,3 +83,57 @@ class TsnSchool_Model(Base):
 
     def isPublicVersion(self):
         return self.sys_type == 2
+
+
+class Order(Base):
+    __tablename__ = 'orders'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    account_id = Column(Integer, ForeignKey('tsn_account.id'), nullable=False)
+    account = relationship("TsnAccount_Model")
+
+    plan_id = Column(Integer, ForeignKey('plans.id'), nullable=True)
+
+    run_type = Column(String(32), nullable=False)  # morningRun | sumRun | freedom
+    distance = Column(Float, nullable=False)
+    status = Column(String(16), nullable=False, default='pending')  # pending | running | completed | failed
+    username = Column(String(64), nullable=True)
+    school_name = Column(String(128), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    error_msg = Column(Text, nullable=True)
+    result_msg = Column(Text, nullable=True)
+    logs = Column(Text, nullable=True)
+    use_image_bed = Column(Boolean, default=False, nullable=False)
+
+
+class Plan(Base):
+    __tablename__ = 'plans'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    account_id = Column(Integer, ForeignKey('tsn_account.id'), nullable=False)
+    account = relationship("TsnAccount_Model")
+
+    run_type = Column(String(32), nullable=False)
+    total_distance = Column(Float, nullable=False)
+    daily_limit = Column(Float, nullable=False)
+    completed_distance = Column(Float, default=0.0, nullable=False)
+    status = Column(String(16), default='active', nullable=False)  # active | completed | cancelled
+    last_run_date = Column(String(10), nullable=True)  # YYYY-MM-DD
+    use_image_bed = Column(Boolean, default=False, nullable=False)
+    scheduled_hour = Column(Float, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class WebUser(Base):
+    """Web 管理后台用户表"""
+    __tablename__ = "web_users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(64), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(128), nullable=False)
+    is_admin = Column(Boolean, default=False, nullable=False)
+    credits = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
