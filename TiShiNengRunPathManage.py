@@ -66,7 +66,7 @@ class TsnRunPolyline:
             # 生成随机速度
             millisecond_interval = random.randint(minMillisecondInterval, maxMillisecondInterval)
             time_interval = millisecond_interval / 1000
-            speed_variation = random.uniform(0.6, 1)
+            speed_variation = random.uniform(0.85, 1.15)
             actual_speed = avg_speed * speed_variation
             motion_distance = actual_speed * time_interval  # 应行驶的距离
 

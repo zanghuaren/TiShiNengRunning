@@ -561,7 +561,7 @@ class TiShiNengSdkPublic:
             logger.debug(resp_json)
             if resp_json['code'] == 0:
                 return resp_json['data']
-            raise TiShiNengError(resp_json['msg'])
+            raise TiShiNengError(f"人脸识别失败(code={resp_json['code']}): {resp_json['msg']}", resp_json['code'])
         else:
             try:
                 err = resp.json()

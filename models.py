@@ -107,6 +107,7 @@ class Order(Base):
     result_msg = Column(Text, nullable=True)
     logs = Column(Text, nullable=True)
     use_image_bed = Column(Boolean, default=False, nullable=False)
+    pace = Column(Float, nullable=True)  # 分钟/公里，None 表示随机
 
 
 class Plan(Base):
@@ -124,6 +125,7 @@ class Plan(Base):
     last_run_date = Column(String(10), nullable=True)  # YYYY-MM-DD
     use_image_bed = Column(Boolean, default=False, nullable=False)
     scheduled_hour = Column(Float, nullable=True)
+    pace = Column(Float, nullable=True)  # 分钟/公里，None 表示随机
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

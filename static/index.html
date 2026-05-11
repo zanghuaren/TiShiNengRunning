@@ -104,6 +104,8 @@ tr:hover td { background: #fafbff; }
   .form-grid { grid-template-columns: 1fr; }
   .form-group.full { grid-column: 1; }
   th.hide-mobile, td.hide-mobile { display: none; }
+  .hide-mobile { display: none !important; }
+  .show-mobile { display: inline !important; }
   .header-title-full { display: none; }
   .header-title-short { display: inline; }
   .header-credits-icon { display: none; }
@@ -113,11 +115,13 @@ tr:hover td { background: #fafbff; }
   .header-title-full { display: inline; }
   .header-title-short { display: none; }
   .header-credits-icon { display: inline; }
+  .show-mobile { display: none !important; }
 }
 .badge { display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 12px; font-weight: 500; }
 .badge-week-limit { background: #fff3e0; color: #e65100; }
 .badge-day-limit  { background: #fff3e0; color: #e65100; }
 .badge-face-error { background: #fce4ec; color: #880e4f; }
+.badge-bed-error  { background: #ede7f6; color: #4527a0; }
 .badge-cheating   { background: #311b92; color: #fff; }
 .badge-running-now { background: #e3f0ff; color: #1a73e8; }
 
@@ -293,10 +297,10 @@ tr:hover td { background: #fafbff; }
         <label>总距离 (km)</label>
         <input type="number" id="order-total-distance" min="0.1" max="500" step="0.1" style="width:100%" oninput="onTotalDistanceChange()">
       </div>
-      <div class="form-group">
+      <div class="form-group" style="display:none">
         <label>图床图片</label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;font-size:14px;color:#555;padding:9px 0">
-          <input type="checkbox" id="order-use-image-bed" style="width:auto;margin:0">
+          <input type="checkbox" id="order-use-image-bed" checked style="width:auto;margin:0">
           启用图床图片
         </label>
       </div>
@@ -313,6 +317,21 @@ tr:hover td { background: #fafbff; }
             <span class="time-slider-badge time-slider-off" id="scheduled-badge">不定时</span>
           </div>
           <div class="time-slider-labels"><span>08:00</span><span>11:30</span><span>15:00</span><span>18:30</span><span>22:00</span></div>
+        </div>
+      </div>
+      <div class="form-group full" id="pace-group">
+        <label>计划跑步配速</label>
+        <div class="time-slider-wrap">
+          <label style="font-size:13px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;margin-bottom:8px">
+            <input type="checkbox" id="pace-enable" style="width:auto" onchange="onPaceToggle(this)">
+            启用配速设置
+          </label>
+          <div class="time-slider-track" id="pace-track" style="display:none">
+            <input type="range" id="order-pace-slider" min="0" max="90" step="1"
+              style="--pct:50%" oninput="onPaceSlider(this)">
+            <span class="time-slider-badge" id="pace-badge">7'30"</span>
+          </div>
+          <div class="time-slider-labels" id="pace-labels" style="display:none"><span>3'00"</span><span>5'15"</span><span>7'30"</span><span>9'45"</span><span>12'00"</span></div>
         </div>
       </div>
       <div class="form-group full" style="display:none">
@@ -399,13 +418,14 @@ tr:hover td { background: #fafbff; }
 <!-- 计划任务 -->
 <div id="panel-plans" class="panel" style="max-width:1200px">
   <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
-      <h3 style="margin-bottom:0">进行中</h3>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span id="plans-page-info" style="font-size:13px;color:#888"></span>
-        <button class="btn btn-ghost btn-sm" id="btn-plans-prev" onclick="changePlansPage(-1)" style="display:none">上一页</button>
-        <button class="btn btn-ghost btn-sm" id="btn-plans-next" onclick="changePlansPage(1)" style="display:none">下一页</button>
-        <button class="btn btn-ghost btn-sm" id="btn-retry-failed" onclick="retryFailedPlans(this)" style="color:#c5221f;border-color:#f5c6c4">重跑失败订单</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px">
+      <h3 style="margin-bottom:0">进行中 <span id="plans-today-stats" class="hide-mobile" style="font-size:13px;font-weight:400;color:#555;margin-left:8px"></span></h3>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span id="plans-refresh-hint" class="refresh-hint hide-mobile" style="margin:0;white-space:nowrap">每 10 秒自动刷新</span>
+        <span id="plans-page-info" style="font-size:13px;color:#888;white-space:nowrap"></span>
+        <button class="btn btn-ghost btn-sm" id="btn-plans-prev" onclick="changePlansPage(-1)" style="display:none"><span class="hide-mobile">上一页</span><span class="show-mobile">‹</span></button>
+        <button class="btn btn-ghost btn-sm" id="btn-plans-next" onclick="changePlansPage(1)" style="display:none"><span class="hide-mobile">下一页</span><span class="show-mobile">›</span></button>
+        <button class="btn btn-ghost btn-sm" id="btn-retry-failed" onclick="retryFailedPlans(this)" style="color:#c5221f;border-color:#f5c6c4"><span class="hide-mobile">重跑失败订单</span><span class="show-mobile">重跑失败</span></button>
       </div>
     </div>
     <div class="table-wrap">
@@ -517,8 +537,21 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', names[i] === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
-  if (name === 'plans') loadPlans();
+  if (name === 'plans') { loadPlans(); startPlansAutoRefresh(); } else { stopPlansAutoRefresh(); }
   if (name === 'admin') loadAdminUsers();
+}
+
+let _plansRefreshTimer = null;
+function startPlansAutoRefresh() {
+  if (_plansRefreshTimer) return;
+  _plansRefreshTimer = setInterval(() => { if (_currentPanel() === 'plans') loadPlans(); }, 10000);
+}
+function stopPlansAutoRefresh() {
+  if (_plansRefreshTimer) { clearInterval(_plansRefreshTimer); _plansRefreshTimer = null; }
+}
+function _currentPanel() {
+  const active = document.querySelector('.panel.active');
+  return active ? active.id.replace('panel-', '') : '';
 }
 
 // ── 初始化 ────────────────────────────────────────────────────────────────────
@@ -530,6 +563,12 @@ async function init() {
   renderDropdown('');
   const saved = localStorage.getItem('lastDistance');
   if (saved) document.getElementById('order-distance').value = saved;
+  const savedSchoolId = localStorage.getItem('lastSchoolId');
+  const savedSchoolName = localStorage.getItem('lastSchoolName');
+  if (savedSchoolId && savedSchoolName) {
+    document.getElementById('school-id-val').value = savedSchoolId;
+    document.getElementById('school-search').value = savedSchoolName;
+  }
   try { allAccounts = await api('/api/accounts'); } catch(e) {}
   // 初始化定时跑步区域（隐藏滑块）
   onScheduledToggle(document.getElementById('scheduled-enable'));
@@ -579,6 +618,8 @@ function closeDropdown() {
 function selectSchool(id, name) {
   document.getElementById('school-id-val').value = id;
   document.getElementById('school-search').value = name;
+  localStorage.setItem('lastSchoolId', id);
+  localStorage.setItem('lastSchoolName', name);
   document.getElementById('school-dropdown').classList.remove('open');
 }
 
@@ -662,6 +703,24 @@ function onScheduledSlider(slider) {
   slider.style.setProperty('--pct', pct + '%');
 }
 
+function onPaceToggle(cb) {
+  const track = document.getElementById('pace-track');
+  const labels = document.getElementById('pace-labels');
+  track.style.display = cb.checked ? '' : 'none';
+  labels.style.display = cb.checked ? '' : 'none';
+  if (cb.checked) onPaceSlider(document.getElementById('order-pace-slider'));
+}
+
+function onPaceSlider(slider) {
+  const badge = document.getElementById('pace-badge');
+  const pace = 3 + parseInt(slider.value) * 0.1;
+  const m = Math.floor(pace);
+  const s = Math.round((pace - m) * 60);
+  badge.textContent = `${m}'${String(s).padStart(2,'0')}"`;
+  const pct = (parseInt(slider.value) / 90 * 100).toFixed(1);
+  slider.style.setProperty('--pct', pct + '%');
+}
+
 async function placeOrder() {
   const schoolId = document.getElementById('school-id-val').value;
   const username = document.getElementById('order-username').value.trim();
@@ -673,6 +732,8 @@ async function placeOrder() {
   const useImageBed = document.getElementById('order-use-image-bed').checked;
   const scheduledEnabled = document.getElementById('scheduled-enable').checked;
   const scheduledSlider = document.getElementById('order-scheduled-slider');
+  const paceEnabled = document.getElementById('pace-enable').checked;
+  const paceSlider = document.getElementById('order-pace-slider');
   const faceInput = document.getElementById('face-input');
   const msgEl = document.getElementById('order-msg');
   const btn = document.getElementById('btn-place');
@@ -699,6 +760,10 @@ async function placeOrder() {
     if (scheduledEnabled) {
       const scheduledHour = 8 + parseInt(scheduledSlider.value) * (14 / 84);
       form.append('scheduled_hour', scheduledHour.toFixed(4));
+    }
+    if (paceEnabled) {
+      const pace = 3 + parseInt(paceSlider.value) * 0.1;
+      form.append('pace', pace.toFixed(1));
     }
     if (faceInput.files[0]) form.append('face_image', faceInput.files[0]);
 
@@ -1071,6 +1136,7 @@ const DAY_STATUS_META = {
   week_limit: { label: '周上限',  cls: 'badge-week-limit' },
   day_limit:  { label: '日上限',  cls: 'badge-day-limit' },
   face_error: { label: '人脸错误', cls: 'badge-face-error' },
+  bed_error:  { label: '图床错误', cls: 'badge-bed-error' },
   cheating:   { label: '作弊',    cls: 'badge-cheating' },
   other:      { label: '其他失败', cls: 'badge-failed' },
 };
@@ -1098,6 +1164,16 @@ async function loadPlans() {
   const other  = data.filter(p => p.status !== 'active');
 
   renderActivePlans();
+
+  const hint = document.getElementById('plans-refresh-hint');
+  if (hint) hint.textContent = `上次刷新: ${new Date().toLocaleTimeString()}，每 10 秒自动刷新`;
+
+  const successStatuses = ['success', 'day_limit', 'week_limit'];
+  const failStatuses = ['face_error', 'bed_error', 'cheating', 'other'];
+  const todaySuccess = _plansActiveAll.filter(p => successStatuses.includes(p.today_status)).length;
+  const todayFail = _plansActiveAll.filter(p => failStatuses.includes(p.today_status)).length;
+  const statsEl = document.getElementById('plans-today-stats');
+  if (statsEl) statsEl.innerHTML = `今日成功：<b>${todaySuccess}</b>&nbsp;&nbsp;今日失败：<b>${todayFail}</b>`;
 
   const tbodyOther = document.getElementById('plans-tbody-other');
   const emptyOther = document.getElementById('plans-empty-other');
@@ -1234,7 +1310,7 @@ async function openPlanDetail(planId, username) {
       document.getElementById('plan-detail-empty').style.display = '';
       return;
     }
-    const hasError = s => ['week_limit','day_limit','face_error','cheating','other'].includes(s);
+    const hasError = s => ['week_limit','day_limit','face_error','bed_error','cheating','other'].includes(s);
     document.getElementById('plan-detail-tbody').innerHTML = orders.map(o => `
       <tr>
         <td>${o.distance} km</td>

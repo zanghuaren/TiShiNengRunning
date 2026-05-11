@@ -361,6 +361,7 @@ async def _execute_order(order_id: int, start_delay: float = 0):
                 runKiloMeter=order.distance,
                 logRunType=run_type,
                 useImageBed=bool(order.use_image_bed),
+                pace=order.pace,
             )
             await run_server.startRunHandle()
             order.status = "completed"
@@ -369,6 +370,56 @@ async def _execute_order(order_id: int, start_delay: float = 0):
             logger.exception(e)
             order.status = "failed"
             order.error_msg = str(e)
+            # 人脸401：重新认证后立刻重跑一次
+            from TiShiNengError import TiShiNengError as _TsnErr
+            is_face_401 = (isinstance(e, _TsnErr) and e.code == 401 and "人脸识别失败" in str(e))
+            if is_face_401 and order.plan_id and "[401重试]" not in (order.error_msg or ""):
+                order.error_msg = str(e) + " [将重新认证后重试]"
+                _plan_id = order.plan_id
+                _order_id = order.id
+                async def _reauth_and_retry(oid: int, pid: int):
+                    logger.info(f"人脸401：计划 #{pid} 订单 #{oid} 开始重新认证")
+                    async for retry_db in get_db():
+                        orig = (await retry_db.execute(select(Order).where(Order.id == oid))).scalar_one_or_none()
+                        if orig is None:
+                            return
+                        acct = (await retry_db.execute(
+                            select(TsnAccount_Model).options(selectinload(TsnAccount_Model.school))
+                            .where(TsnAccount_Model.id == orig.account_id)
+                        )).scalar_one_or_none()
+                        if acct is None:
+                            return
+                        retry_plan = (await retry_db.execute(
+                            select(Plan).where(Plan.id == pid)
+                        )).scalar_one_or_none()
+                        if retry_plan is None or retry_plan.status != "active":
+                            return
+                        try:
+                            await tsnPasswordAuthServer(acct.school_id, acct.username, acct.password, retry_db)
+                            logger.info(f"人脸401：账号 {acct.username} 重新认证成功，创建重跑订单")
+                        except Exception as auth_e:
+                            logger.warning(f"人脸401：账号 {acct.username} 重新认证失败: {auth_e}")
+                            return
+                        new_order = Order(
+                            account_id=orig.account_id,
+                            plan_id=pid,
+                            run_type=orig.run_type,
+                            distance=orig.distance,
+                            status="pending",
+                            created_at=datetime.now(),
+                            use_image_bed=orig.use_image_bed,
+                            pace=orig.pace,
+                            username=orig.username,
+                            school_name=orig.school_name,
+                            error_msg="人脸401重试",
+                        )
+                        retry_db.add(new_order)
+                        await retry_db.flush()
+                        retry_plan.last_run_date = datetime.now().strftime("%Y-%m-%d")
+                        await retry_db.commit()
+                        asyncio.create_task(_execute_order(new_order.id))
+                        logger.info(f"人脸401：已创建重跑订单 #{new_order.id}")
+                asyncio.create_task(_reauth_and_retry(_order_id, _plan_id))
             # 网络繁忙：20分钟后自动重跑一次（通过查父订单 error_msg 判断是否已重试过）
             if "网络繁忙" in str(e) and order.plan_id:
                 # 检查该计划今天是否已有过"网络繁忙重试"的订单，避免无限重试
@@ -403,6 +454,7 @@ async def _execute_order(order_id: int, start_delay: float = 0):
                                 status="pending",
                                 created_at=datetime.now(),
                                 use_image_bed=orig.use_image_bed,
+                                pace=orig.pace,
                                 username=orig.username,
                                 school_name=orig.school_name,
                                 error_msg="网络繁忙重试",
@@ -513,6 +565,7 @@ async def retry_order(order_id: int, current_user: WebUser = Depends(get_current
             status="pending",
             created_at=datetime.now(),
             use_image_bed=order.use_image_bed,
+            pace=order.pace,
             username=order.username,
             school_name=order.school_name,
         )
@@ -631,6 +684,7 @@ async def place_order(
     distance: float = Form(2.0),
     total_distance: Optional[float] = Form(None),
     use_image_bed: bool = Form(False),
+    pace: Optional[float] = Form(None),
     scheduled_hour: Optional[float] = Form(None),
     face_image: Optional[UploadFile] = File(None),
     current_user: WebUser = Depends(get_current_user),
@@ -641,6 +695,8 @@ async def place_order(
         raise HTTPException(status_code=422, detail="距离须在 0~50 km 之间")
     if scheduled_hour is not None and not (0 <= scheduled_hour < 24):
         raise HTTPException(status_code=422, detail="scheduled_hour 须在 0~23.99 之间")
+    if pace is not None and not (3 <= pace <= 12):
+        raise HTTPException(status_code=422, detail="配速须在 3~12 分钟/公里之间")
     if total_distance is not None:
         if total_distance > 500:
             raise HTTPException(status_code=422, detail="总距离须在 0~500 km 之间")
@@ -702,6 +758,7 @@ async def place_order(
                 total_distance=total_distance,
                 daily_limit=distance,
                 use_image_bed=use_image_bed,
+                pace=pace,
                 scheduled_hour=scheduled_hour if scheduled_hour is not None else (datetime.now().hour + datetime.now().minute / 60),
                 last_run_date=datetime.now().strftime("%Y-%m-%d") if already_ran_today else None,
             )
@@ -718,6 +775,7 @@ async def place_order(
             status="pending",
             created_at=datetime.now(),
             use_image_bed=use_image_bed,
+            pace=pace,
             username=account.username,
             school_name=account.school.school_name if account.school else "",
         )
@@ -989,6 +1047,7 @@ async def list_plans(current_user: WebUser = Depends(get_current_user)):
                 d["today_status"] = "pending"
                 d["today_order_id"] = None
             else:
+                # last_run_date == today 但查不到订单（极少情况）
                 d["today_status"] = "pending"
                 d["today_order_id"] = None
             out.append(d)
@@ -1090,6 +1149,7 @@ async def run_plan_now(plan_id: int, current_user: WebUser = Depends(get_current
             status="pending",
             created_at=datetime.now(),
             use_image_bed=plan.use_image_bed,
+            pace=plan.pace,
             username=plan.account.username if plan.account else "",
             school_name=plan.account.school.school_name if plan.account and plan.account.school else "",
         )
@@ -1117,6 +1177,8 @@ def _infer_day_status(order: Order) -> str:
         if ("人脸" in msg or "face" in msg or
                 "20001" in msg or "20002" in msg or "20003" in msg):
             return "face_error"
+        if ("20010" in msg or "20011" in msg or "图床" in msg):
+            return "bed_error"
         if "作弊" in msg or "黑名单" in msg or "禁跑" in msg:
             return "cheating"
         return "other"
@@ -1167,6 +1229,7 @@ async def run_all_plans(current_user: WebUser = Depends(get_current_user)):
                 status="pending",
                 created_at=datetime.now(),
                 use_image_bed=plan.use_image_bed,
+                pace=plan.pace,
                 username=plan.account.username if plan.account else "",
                 school_name=plan.account.school.school_name if plan.account and plan.account.school else "",
             )
@@ -1185,7 +1248,7 @@ async def run_all_plans(current_user: WebUser = Depends(get_current_user)):
 
 @app.post("/api/plans/retry-failed", status_code=200)
 async def retry_failed_plans(current_user: WebUser = Depends(get_current_user)):
-    """对今天所有 face_error / other 失败的计划子订单，各重跑一次（每个计划只重跑最近一条）"""
+    """对今天所有 face_error / bed_error / other 失败的计划子订单，各重跑一次（每个计划只重跑最近一条）"""
     async for db in get_db():
         today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -1210,9 +1273,9 @@ async def retry_failed_plans(current_user: WebUser = Depends(get_current_user)):
 
         retriggered = 0
         for old_order in failed_orders:
-            # 只重跑 face_error 和 other 类型
+            # 只重跑 face_error、bed_error 和 other 类型
             day_status = _infer_day_status(old_order)
-            if day_status not in ("face_error", "other"):
+            if day_status not in ("face_error", "bed_error", "other"):
                 continue
 
             # 非管理员只能重跑自己管辖的账号
@@ -1245,6 +1308,7 @@ async def retry_failed_plans(current_user: WebUser = Depends(get_current_user)):
                 status="pending",
                 created_at=datetime.now(),
                 use_image_bed=old_order.use_image_bed,
+                pace=old_order.pace,
                 username=old_order.username,
                 school_name=old_order.school_name,
             )
@@ -1387,6 +1451,7 @@ async def _trigger_plan_orders():
                 status="pending",
                 created_at=datetime.now(),
                 use_image_bed=plan.use_image_bed,
+                pace=plan.pace,
                 username=plan.account.username if plan.account else "",
                 school_name=plan.account.school.school_name if plan.account and plan.account.school else "",
             )

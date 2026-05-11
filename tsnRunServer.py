@@ -39,11 +39,12 @@ def seconds_to_time_format(total_seconds):
 
 
 class TsnRunServer:
-    def __init__(self, accountId: int, runKiloMeter: float, logRunType: TsnRunType, useImageBed: bool = False):
+    def __init__(self, accountId: int, runKiloMeter: float, logRunType: TsnRunType, useImageBed: bool = False, pace: float = None):
         self.accountId = accountId
         self.runKiloMeter = runKiloMeter
         self.logRunType = logRunType
         self.useImageBed = useImageBed
+        self.pace = pace  # 分钟/公里，None 时随机 4.5~5.5
 
         self.accountModel: TsnAccount_Model | None = None
         self.tsnClient = None
@@ -182,99 +183,94 @@ class TsnRunServer:
         return []
 
     async def getFaceImage(self):
-        # 图床模式
-        if self.useImageBed:
-            # 首次调用时拉取图片列表（只拉一次，空列表也不重试）
-            if not self._bed_images_fetched:
+        # 图床模式：首次调用时拉取图片列表，失败则重试一次，仍为空则中止跑步
+        if not self._bed_images_fetched:
+            self._bed_images = await self._fetch_bed_images()
+            if not self._bed_images:
+                logger.warning("图床首次获取为空，5秒后重试一次...")
+                await asyncio.sleep(5)
                 self._bed_images = await self._fetch_bed_images()
-                self._bed_image_index = 0
-                self._bed_images_fetched = True
+            self._bed_image_index = 0
+            self._bed_images_fetched = True
 
-            if self._bed_images:
-                # 按顺序轮换，保证多张时开始/结束用不同图片
-                url = self._bed_images[self._bed_image_index % len(self._bed_images)]
-                self._bed_image_index += 1
-                filename = url.rsplit('/', 1)[-1]
-                logger.info(f"图床图片: {filename} (第{self._bed_image_index}次人脸，共{len(self._bed_images)}张可用)")
-                try:
-                    async with httpx.AsyncClient(verify=False) as client:
-                        img_resp = await client.get(url, timeout=30.0)
-                    if img_resp.status_code == 200:
-                        return img_resp.content
-                    logger.warning(f"图床图片下载失败，状态码: {img_resp.status_code}，回退本地")
-                except Exception as e:
-                    logger.warning(f"图床图片下载失败: {e}，回退本地")
-            else:
-                logger.warning("图床无可用图片，回退本地")
+        if not self._bed_images:
+            raise TiShiNengError("图床无可用图片，已重试一次仍失败，中止跑步，请检查图床是否已上传人脸图片", 20010)
 
-        # 本地模式（或图床失败后的回退）
-        face_dir = Path("face_images") / str(self.accountModel.school_id) / str(self.accountModel.user_id)
-        face_dir.mkdir(parents=True, exist_ok=True)
+        # 按顺序轮换，保证多张时开始/结束用不同图片
+        url = self._bed_images[self._bed_image_index % len(self._bed_images)]
+        self._bed_image_index += 1
+        filename = url.rsplit('/', 1)[-1]
+        logger.info(f"图床图片: {filename} (第{self._bed_image_index}次人脸，共{len(self._bed_images)}张可用)")
+        try:
+            async with httpx.AsyncClient(verify=False) as client:
+                img_resp = await client.get(url, timeout=30.0)
+            if img_resp.status_code == 200:
+                return img_resp.content
+            raise TiShiNengError(f"图床图片下载失败，状态码: {img_resp.status_code}，中止跑步", 20011)
+        except TiShiNengError:
+            raise
+        except Exception as e:
+            raise TiShiNengError(f"图床图片下载失败: {e}，中止跑步", 20011)
 
-        # 检查文件夹中是否已有人脸图片
-        existing_images = list(face_dir.glob("*.jpg")) + list(face_dir.glob("*.png"))
-
-        if existing_images:
-            # 随机选择一张已有的图片
-            selected_image = random.choice(existing_images)
-            logger.info(f"使用本地人脸图片: {selected_image}")
-            with open(selected_image, 'rb') as f:
-                return f.read()
-
-        # 本地没有图片，调用API获取
-        logger.info("本地没有人脸图片，从服务器获取...")
-
-        face_list_resp = await self.tsnClient.listBasUserImageFace()
-        logger.info(f"API返回数据: {face_list_resp}")
-
-        if not face_list_resp:
-            raise TiShiNengError("获取人脸列表失败，请检查网络连接或账号状态", 20001)
-
-        face_data = face_list_resp
-        if not face_data or len(face_data) == 0:
-            raise TiShiNengError("该账号没有人脸图片记录，请先在APP中上传人脸照片", 20002)
-
-        # 下载并保存所有人脸图片
-        download_count = 0
-        async with httpx.AsyncClient() as client:
-            for idx, face_item in enumerate(face_data):
-                image_url = face_item.get('imageRouteUrl')
-                if not image_url:
-                    continue
-
-                try:
-                    logger.info(f"下载人脸图片 {idx + 1}/{len(face_data)}: {image_url}")
-                    resp = await client.get(image_url, timeout=30.0)
-
-                    if resp.status_code == 200:
-                        # 保存图片
-                        image_id = face_item.get('id', f'face_{idx}')
-                        # 从URL中提取文件扩展名
-                        ext = '.jpg'
-                        if '.' in image_url:
-                            ext = '.' + image_url.rsplit('.', 1)[-1].split('?')[0]
-
-                        file_path = face_dir / f"{image_id}{ext}"
-                        with open(file_path, 'wb') as f:
-                            f.write(resp.content)
-                        logger.info(f"人脸图片已保存: {file_path}")
-                        download_count += 1
-                    else:
-                        logger.warning(f"下载失败，状态码: {resp.status_code}")
-
-                except Exception as e:
-                    logger.error(f"下载人脸图片失败: {e}")
-                    continue
-
-        # 再次检查是否有下载成功的图片
-        existing_images = list(face_dir.glob("*.jpg")) + list(face_dir.glob("*.png"))
-        if existing_images:
-            selected_image = random.choice(existing_images)
-            logger.info(f"使用刚下载的人脸图片: {selected_image} (共下载 {download_count} 张)")
-            with open(selected_image, 'rb') as f:
-                return f.read()
-        else:
-            raise TiShiNengError(f"人脸图片下载失败，尝试下载 {len(face_data)} 张但都失败了，请检查网络连接", 20003)
+        # # 本地模式（或图床失败后的回退）
+        # face_dir = Path("face_images") / str(self.accountModel.school_id) / str(self.accountModel.user_id)
+        # face_dir.mkdir(parents=True, exist_ok=True)
+        #
+        # # 检查文件夹中是否已有人脸图片
+        # existing_images = list(face_dir.glob("*.jpg")) + list(face_dir.glob("*.png"))
+        #
+        # if existing_images:
+        #     selected_image = random.choice(existing_images)
+        #     logger.info(f"使用本地人脸图片: {selected_image}")
+        #     with open(selected_image, 'rb') as f:
+        #         return f.read()
+        #
+        # # 本地没有图片，调用API获取
+        # logger.info("本地没有人脸图片，从服务器获取...")
+        #
+        # face_list_resp = await self.tsnClient.listBasUserImageFace()
+        # logger.info(f"API返回数据: {face_list_resp}")
+        #
+        # if not face_list_resp:
+        #     raise TiShiNengError("获取人脸列表失败，请检查网络连接或账号状态", 20001)
+        #
+        # face_data = face_list_resp
+        # if not face_data or len(face_data) == 0:
+        #     raise TiShiNengError("该账号没有人脸图片记录，请先在APP中上传人脸照片", 20002)
+        #
+        # download_count = 0
+        # async with httpx.AsyncClient() as client:
+        #     for idx, face_item in enumerate(face_data):
+        #         image_url = face_item.get('imageRouteUrl')
+        #         if not image_url:
+        #             continue
+        #         try:
+        #             logger.info(f"下载人脸图片 {idx + 1}/{len(face_data)}: {image_url}")
+        #             resp = await client.get(image_url, timeout=30.0)
+        #             if resp.status_code == 200:
+        #                 image_id = face_item.get('id', f'face_{idx}')
+        #                 ext = '.jpg'
+        #                 if '.' in image_url:
+        #                     ext = '.' + image_url.rsplit('.', 1)[-1].split('?')[0]
+        #                 file_path = face_dir / f"{image_id}{ext}"
+        #                 with open(file_path, 'wb') as f:
+        #                     f.write(resp.content)
+        #                 logger.info(f"人脸图片已保存: {file_path}")
+        #                 download_count += 1
+        #             else:
+        #                 logger.warning(f"下载失败，状态码: {resp.status_code}")
+        #         except Exception as e:
+        #             logger.error(f"下载人脸图片失败: {e}")
+        #             continue
+        #
+        # existing_images = list(face_dir.glob("*.jpg")) + list(face_dir.glob("*.png"))
+        # if existing_images:
+        #     selected_image = random.choice(existing_images)
+        #     logger.info(f"使用刚下载的人脸图片: {selected_image} (共下载 {download_count} 张)")
+        #     with open(selected_image, 'rb') as f:
+        #         return f.read()
+        # else:
+        #     raise TiShiNengError(f"人脸图片下载失败，尝试下载 {len(face_data)} 张但都失败了，请检查网络连接", 20003)
 
     async def uploadFace(self, coordinates, sleep=0, faceType=1):
         """
@@ -546,12 +542,16 @@ class TsnRunServer:
         logger.info(f'pointList:{self.pointList}')
         self.needRunKm = self.exerciseSetting['totalRange']
         if self.runKiloMeter < self.needRunKm:
-            self.runKiloMeter = self.needRunKm + random.uniform(0.1, 0.2)
+            self.runKiloMeter = self.needRunKm + random.uniform(0.1, 0.5)
         else:
-            self.runKiloMeter = self.runKiloMeter + random.uniform(0.1, 0.2)
+            self.runKiloMeter = self.runKiloMeter + random.uniform(0.1, 0.5)
         logger.info(self.exerciseSetting)
 
-        self.planUseTime = self.runKiloMeter * random.uniform(4.5, 5.5) * 60
+        if self.pace is None:
+            self.planUseTime = self.runKiloMeter * random.uniform(4.5, 5.5) * 60
+        else:
+            jitter = random.uniform(-0.25, 0.25)  # ±15秒/公里 → ±0.25分钟/公里
+            self.planUseTime = self.runKiloMeter * (self.pace + jitter) * 60
         logger.info(f'planUseTime:{self.planUseTime}')
         if self.isPublic:
             self.endStride = self.exerciseSetting['endStride']
