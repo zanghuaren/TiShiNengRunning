@@ -333,5 +333,52 @@ tsnOpenSourceVersion/
 
 ---
 
+## 服务器部署与迁移
+
+### 首次部署
+
+```bash
+# 1. 克隆项目（含数据库和人脸图片）
+git clone https://github.com/zanghuaren/TiShiNengRunning.git
+cd TiShiNengRunning
+
+# 2. 安装依赖
+pip install -r requirements.txt
+
+# 3. 配置代理（跑步请求需要走代理）
+export http_proxy=http://219.152.95.106:8201
+export https_proxy=http://219.152.95.106:8201
+export HTTP_PROXY=http://219.152.95.106:8201
+export HTTPS_PROXY=http://219.152.95.106:8201
+
+# 4. 后台启动服务
+nohup uvicorn web_app:app --host 0.0.0.0 --port 8000 >> log.txt 2>&1 &
+```
+
+### 代理说明
+
+- 项目通过读取系统环境变量 `http_proxy`/`HTTP_PROXY` 自动使用代理（见 `TiShiNengSdkBase.py`）
+- 代理影响所有对体适能服务器的请求（登录、跑步、人脸等）
+- **图床请求不走代理**（`tsnRunServer.py` 中图床用独立 httpx 客户端，直连）
+- 若需永久生效，将 export 命令写入 `~/.bashrc` 或 `/etc/environment`，或直接加到启动命令前：
+
+```bash
+nohup env http_proxy=http://219.152.95.106:8201 https_proxy=http://219.152.95.106:8201 \
+  uvicorn web_app:app --host 0.0.0.0 --port 8000 >> log.txt 2>&1 &
+```
+
+### 快捷代理命令
+
+当前服务器配置了 `proxy_on` / `proxy_off` 快捷命令切换代理。
+
+### 迁移注意事项
+
+- `tsn_data.db`：数据库，包含所有账号、计划、订单数据，已纳入 git 跟踪
+- `face_images/`：人脸图片缓存，已纳入 git 跟踪
+- `order_logs/`：跑步日志，已纳入 git 跟踪
+- 迁移时直接 `git pull` 即可获得完整数据
+
+---
+
 
 **免责声明**: 本项目为逆向工程研究成果。使用者需自行承担使用本代码的一切责任。
