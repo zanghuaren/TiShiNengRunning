@@ -419,7 +419,7 @@ tr:hover td { background: #fafbff; }
 <div id="panel-plans" class="panel" style="max-width:1200px">
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px">
-      <h3 style="margin-bottom:0">进行中 <span id="plans-today-stats" class="hide-mobile" style="font-size:13px;font-weight:400;color:#555;margin-left:8px"></span></h3>
+      <h3 style="margin-bottom:0;display:flex;align-items:center;flex-wrap:wrap;gap:0">进行中 <span id="plans-today-stats" class="hide-mobile" style="font-size:13px;font-weight:400;color:#555;margin-left:8px"></span><input type="text" id="plans-filter" placeholder="搜索账号、学校、状态、ID…" oninput="onPlansFilter()" class="hide-mobile" style="font-size:13px;padding:5px 10px;border:1px solid #ddd;border-radius:6px;width:200px;outline:none;font-weight:400;margin-left:2em"></h3>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         <span id="plans-refresh-hint" class="refresh-hint hide-mobile" style="margin:0;white-space:nowrap">每 10 秒自动刷新</span>
         <span id="plans-page-info" style="font-size:13px;color:#888;white-space:nowrap"></span>
@@ -1205,11 +1205,25 @@ function makeProgress(p) {
   </div>`;
 }
 
+function onPlansFilter() {
+  _plansActivePage = 0;
+  renderActivePlans();
+}
+
 function renderActivePlans() {
-  const total = _plansActiveAll.length;
+  const query = (document.getElementById('plans-filter')?.value || '').trim().toLowerCase();
+  const keywords = query ? query.split(/\s+/).filter(Boolean) : [];
+
+  const filtered = keywords.length ? _plansActiveAll.filter(p => {
+    const statusLabel = (DAY_STATUS_META[p.today_status] || DAY_STATUS_META.other).label;
+    const haystack = [p.username, p.school_name, statusLabel, String(p.id)].join(' ').toLowerCase();
+    return keywords.every(k => haystack.includes(k));
+  }) : _plansActiveAll;
+
+  const total = filtered.length;
   const totalPages = Math.ceil(total / PLANS_PAGE_SIZE) || 1;
   if (_plansActivePage >= totalPages) _plansActivePage = totalPages - 1;
-  const page = _plansActiveAll.slice(_plansActivePage * PLANS_PAGE_SIZE, (_plansActivePage + 1) * PLANS_PAGE_SIZE);
+  const page = filtered.slice(_plansActivePage * PLANS_PAGE_SIZE, (_plansActivePage + 1) * PLANS_PAGE_SIZE);
 
   document.getElementById('plans-page-info').textContent = total > PLANS_PAGE_SIZE
     ? `第 ${_plansActivePage + 1}/${totalPages} 页，共 ${total} 条` : `共 ${total} 条`;

@@ -367,9 +367,9 @@ async def _execute_order(order_id: int, start_delay: float = 0):
             order.status = "completed"
             order.result_msg = f"跑步完成，距离 {order.distance} km"
         except Exception as e:
-            logger.exception(e)
+            logger.exception(repr(e))
             order.status = "failed"
-            order.error_msg = str(e)
+            order.error_msg = str(e) or f"{type(e).__name__}"
             # 人脸401：重新认证后立刻重跑一次
             from TiShiNengError import TiShiNengError as _TsnErr
             is_face_401 = (isinstance(e, _TsnErr) and e.code == 401 and "人脸识别失败" in str(e))
@@ -722,7 +722,7 @@ async def place_order(
         account = result.scalar_one_or_none()
         if account is None:
             raise HTTPException(status_code=500, detail="账号授权后未找到记录")
-        if not current_user.is_admin and account.managed_by is None:
+        if not current_user.is_admin:
             account.managed_by = current_user.username
             await db.flush()
 
@@ -990,7 +990,6 @@ def _plan_dict(plan: Plan) -> dict:
 
 @app.get("/api/plans")
 async def list_plans(current_user: WebUser = Depends(get_current_user)):
-    from sqlalchemy import func as sqlfunc
     async for db in get_db():
         stmt = (
             select(Plan)
@@ -1007,17 +1006,21 @@ async def list_plans(current_user: WebUser = Depends(get_current_user)):
         plan_ids = [p.id for p in plans]
         today_orders: dict[int, Order] = {}
         if plan_ids:
-            # 取每个 plan_id 今天 created_at 最大的那条（含 running/pending）
-            subq = (
-                select(Order.plan_id, sqlfunc.max(Order.id).label("max_id"))
+            # 取今天的订单：优先取 completed，否则取 id 最大的那条
+            subq_all = (
+                select(Order)
                 .where(Order.plan_id.in_(plan_ids), Order.created_at >= today_start)
-                .group_by(Order.plan_id)
-                .subquery()
             )
-            today_stmt = select(Order).join(subq, Order.id == subq.c.max_id)
-            today_result = await db.execute(today_stmt)
-            for o in today_result.scalars().all():
-                today_orders[o.plan_id] = o
+            today_all_result = await db.execute(subq_all)
+            today_all_orders: dict[int, list] = {}
+            for o in today_all_result.scalars().all():
+                today_all_orders.setdefault(o.plan_id, []).append(o)
+            for pid, orders in today_all_orders.items():
+                completed = [o for o in orders if o.status == "completed"]
+                if completed:
+                    today_orders[pid] = max(completed, key=lambda o: o.id)
+                else:
+                    today_orders[pid] = max(orders, key=lambda o: o.id)
 
         # 补充：把内存中正在运行的订单也纳入（防止 created_at 时区差导致漏查）
         running_order_ids = set(_order_log_queues.keys())
@@ -1250,7 +1253,7 @@ async def run_all_plans(current_user: WebUser = Depends(get_current_user)):
 async def retry_failed_plans(current_user: WebUser = Depends(get_current_user)):
     """对今天所有 face_error / bed_error / other 失败的计划子订单，各重跑一次（每个计划只重跑最近一条）"""
     async for db in get_db():
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
         from sqlalchemy import func as sqlfunc
         subq = (
@@ -1298,6 +1301,17 @@ async def retry_failed_plans(current_user: WebUser = Depends(get_current_user)):
             )
             active_result = await db.execute(active_stmt)
             if active_result.scalar_one_or_none() is not None:
+                continue
+
+            # 跳过今天已有 completed 订单的计划
+            today_start_local = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            success_stmt = select(Order).where(
+                Order.plan_id == old_order.plan_id,
+                Order.status == "completed",
+                Order.completed_at >= today_start_local,
+            )
+            success_result = await db.execute(success_stmt)
+            if success_result.scalar_one_or_none() is not None:
                 continue
 
             new_order = Order(
@@ -1429,10 +1443,10 @@ async def _trigger_plan_orders():
                         await db.commit()
                     continue
 
-            # 额外检查：该账号今天是否已有成功的订单（含手动下单）
+            # 额外检查：该计划今天是否已有成功的订单
             today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
             ran_stmt = select(Order).where(
-                Order.account_id == plan.account_id,
+                Order.plan_id == plan.id,
                 Order.status == "completed",
                 Order.completed_at >= today_start,
             )
